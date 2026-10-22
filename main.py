@@ -1,15 +1,26 @@
-from listas import CarritoCompras
-from interfaz import InterfazUsuario
+import argparse
+
 from controlador import ControladorCompras
+from interfaz import InterfazUsuario
+from listas import CarritoCompras
 from permisos import mostrar_matriz_permisos, mostrar_relaciones_sistema
 
 # PATRÓN 5: BOOTSTRAPPER
 
+
 def main():
-    mostrar_matriz_permisos()
-    print()
-    mostrar_relaciones_sistema()
-    print()
+    parser = argparse.ArgumentParser(description="Asistente de Compras Inteligente")
+    parser.add_argument("--consola", action="store_true",
+                        help="Usar el menú de consola en vez de la interfaz gráfica")
+    parser.add_argument("--sin-banner", action="store_true",
+                        help="No imprimir la matriz de permisos ni las relaciones")
+    args = parser.parse_args()
+
+    if not args.sin_banner:
+        mostrar_matriz_permisos()
+        print()
+        mostrar_relaciones_sistema()
+        print()
 
     # Inicialización del Modelo y la Vista
     carrito_model = CarritoCompras()
@@ -19,8 +30,12 @@ def main():
     controlador = ControladorCompras(carrito_model, vista_ui)
     vista_ui.set_controlador(controlador)
 
-    # Arrancar la aplicación (Interfaz Gráfica)
-    vista_ui.ejecutar()
+    # Arrancar la aplicación
+    if args.consola:
+        controlador.ejecutar()
+    else:
+        vista_ui.ejecutar()
+
 
 if __name__ == "__main__":
     main()

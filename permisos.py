@@ -5,11 +5,12 @@ ROLES = ("INVITADO", "CLIENTE", "ADMIN")
 MATRIZ_PERMISOS = {
     "INVITADO": ["ver_menu"],
     "CLIENTE": ["ver_menu", "crear_lista", "agregar_producto",
-                "eliminar_producto", "comparar", "exportar"],
+                "eliminar_producto", "comparar", "exportar",
+                "aplicar_descuento"],
     "ADMIN": ["ver_menu", "crear_lista", "agregar_producto",
               "eliminar_producto", "comparar", "exportar",
-              "login_admin", "cargar_csv", "editar_precio",
-              "gestionar_almacenes"],
+              "aplicar_descuento", "login_admin", "cargar_csv",
+              "editar_precio", "gestionar_almacenes"],
 }
 
 SEPARADOR = "=" * 72
@@ -24,12 +25,14 @@ def mostrar_matriz_permisos():
 
 
 def mostrar_relaciones_sistema():
-    print("RELACIONES DEL SISTEMA (MVC + Strategy)")
-    print("  InterfazUsuario     --eventos UI-->  ControladorCompras")
-    print("  ControladorCompras  --check permiso-->  logger.tiene_permiso")
-    print("  ControladorCompras  --invoca-->  EstrategiaBusqueda (Strategy)")
-    print("  EstrategiaBusqueda  --consulta-->  GestorAlmacenes")
-    print("  GestorAlmacenes     --contiene-->  Almacen.inventario")
+    print("RELACIONES DEL SISTEMA (MVC + Strategy + Observer)")
+    print("  InterfazUsuario      --eventos UI-->  ControladorCompras")
+    print("  ControladorCompras   --check permiso-->  logger.tiene_permiso")
+    print("  ControladorCompras   --invoca-->  EstrategiaBusqueda (Strategy)")
+    print("  EstrategiaBusqueda   --consulta-->  GestorAlmacenes")
+    print("  GestorAlmacenes      --contiene-->  Almacen.inventario (ListaSimple)")
+    print("  CarritoCompras       --notifica-->  InterfazUsuario (Observer)")
+    print("  ControladorCompras   --crea-->  FabricaProductos (Factory Method)")
     print("  logger.tiene_permiso --consulta-->  MATRIZ_PERMISOS")
 
 

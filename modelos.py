@@ -1,7 +1,17 @@
-# PATRÓN 1: FACTORY METHOD 
+import copy
+
+# PATRÓN 1: FACTORY METHOD
+
+
+def normalizar_texto(texto) -> str:
+    """Normaliza nombres/marcas para comparaciones tolerantes a mayúsculas."""
+    return str(texto or "").strip().lower()
+
 
 class Producto:
     """Clase base para todos los productos."""
+    tipo = "normal"
+
     def __init__(self, nombre: str, precio: float, marca: str = "Generica",
                  categoria: str = "General"):
         self.nombre = nombre
@@ -12,12 +22,18 @@ class Producto:
     def obtener_precio_final(self) -> float:
         return self.precio
 
+    def clonar(self):
+        """Copia independiente: editar el inventario no altera el carrito."""
+        return copy.deepcopy(self)
+
     def __str__(self):
-        return f"{self.nombre} - ${self.obtener_precio_final():.2f}"
+        return f"{self.nombre} ({self.marca}) - ${self.obtener_precio_final():.2f}"
 
 
 class ProductoFisico(Producto):
     """Producto físico que requiere costo de envío."""
+    tipo = "fisico"
+
     def __init__(self, nombre: str, precio: float, costo_envio: float = 5.0,
                  marca: str = "Generica", categoria: str = "General"):
         super().__init__(nombre, precio, marca, categoria)
@@ -29,12 +45,16 @@ class ProductoFisico(Producto):
 
 class ProductoDigital(Producto):
     """Producto digital sin costo de envío."""
+    tipo = "digital"
+
     def obtener_precio_final(self) -> float:
         return self.precio
 
 
 class ProductoSuscripcion(Producto):
     """Producto por suscripción recurrente."""
+    tipo = "suscripcion"
+
     def __init__(self, nombre: str, precio_mensual: float, meses: int = 1,
                  marca: str = "Generica", categoria: str = "General"):
         super().__init__(nombre, precio_mensual, marca, categoria)
@@ -46,58 +66,35 @@ class ProductoSuscripcion(Producto):
 
 class FabricaProductos:
     """La Fábrica centraliza la instanciación de objetos según el tipo."""
+
     @staticmethod
-    def crear_producto(tipo: str, nombre: str, precio: float, **kwargs) -> Producto:
-        tipo_norm = tipo.lower().strip()
-        if tipo_norm in ("normal", ""):
-            return Producto(nombre, precio)
+    def crear_producto(tipo: str, nombre: str, precio: float,
+                        marca: str = "Generica", categoria: str = "General",
+                        **kwargs) -> Producto:
+        tipo_norm = normalizar_texto(tipo) or "normal"
+        nombre = str(nombre or "").strip()
+        if not nombre:
+            raise ValueError("El nombre del producto no puede estar vacío")
+        precio = float(precio)
+        if precio < 0:
+            raise ValueError("El precio no puede ser negativo")
+
+        if tipo_norm in ("normal", "producto", ""):
+            return Producto(nombre, precio, marca, categoria)
+
         if tipo_norm == "fisico":
-            costo_envio = kwargs.get("costo_envio", 5.0)
-            return ProductoFisico(nombre, precio, costo_envio)
+            costo_envio = float(kwargs.get("costo_envio", 5.0))
+            if costo_envio < 0:
+                raise ValueError("El costo de envío no puede ser negativo")
+            return ProductoFisico(nombre, precio, costo_envio, marca, categoria)
+
         if tipo_norm == "digital":
-            return ProductoDigital(nombre, precio)
+            return ProductoDigital(nombre, precio, marca, categoria)
+
         if tipo_norm == "suscripcion":
-            meses = kwargs.get("meses", 1)
-            return ProductoSuscripcion(nombre, precio, meses)
+            meses = int(kwargs.get("meses", 1))
+            if meses < 1:
+                raise ValueError("Los meses deben ser al menos 1")
+            return ProductoSuscripcion(nombre, precio, meses, marca, categoria)
+
         raise ValueError(f"Tipo de producto no soportado: {tipo}")
-
-
-class Almacen:
-    """Almacén con inventario en una lista simplemente enlazada."""
-    def __init__(self, id_almacen: int, nombre: str):
-        from listas import ListaSimple
-        self.id_almacen = id_almacen
-        self.nombre = nombre
-        self.inventario = ListaSimple()
-
-
-class GestorAlmacenes:
-    """Gestiona la colección de almacenes del sistema."""
-    def __init__(self):
-        self.almacenes = []
-
-    def agregar_almacen(self, almacen: Almacen):
-        self.almacenes.append(almacen)
-
-    def obtener_almacenes(self) -> list:
-        return self.almacenes
-
-
-# PATRÓN 2: OBSERVER 
-
-class SujetoObservable:
-    """Mantiene una lista de observadores y los notifica al cambiar."""
-    def __init__(self):
-        self._observadores = []
-
-    def agregar_observador(self, observador):
-        if observador not in self._observadores:
-            self._observadores.append(observador)
-
-    def remover_observador(self, observador):
-        if observador in self._observadores:
-            self._observadores.remove(observador)
-
-    def notificar_observadores(self, mensaje: str = ""):
-        for obs in self._observadores:
-            obs.actualizar(self, mensaje)

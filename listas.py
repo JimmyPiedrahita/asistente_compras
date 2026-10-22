@@ -1,6 +1,6 @@
-from typing import Optional, Iterator
+from typing import Iterator, Optional
 
-from modelos import SujetoObservable
+from observer import SujetoObservable
 
 
 class NodoSimple:
@@ -10,6 +10,8 @@ class NodoSimple:
 
 
 class ListaSimple:
+    """Lista simplemente enlazada con acceso por índice (para inventarios)."""
+
     def __init__(self):
         self.cabeza: Optional[NodoSimple] = None
         self.cola: Optional[NodoSimple] = None
@@ -27,11 +29,43 @@ class ListaSimple:
                 self.cola.siguiente = nuevo_nodo
                 self.cola = nuevo_nodo
 
+    def obtener(self, indice: int):
+        if indice < 0:
+            indice += len(self)
+        for posicion, dato in enumerate(self.mostrar()):
+            if posicion == indice:
+                return dato
+        raise IndexError(f"Índice fuera de rango: {indice}")
+
+    def reemplazar(self, indice: int, dato) -> bool:
+        if indice < 0:
+            indice += len(self)
+        actual = self.cabeza
+        posicion = 0
+        while actual is not None:
+            if posicion == indice:
+                actual.dato = dato
+                return True
+            actual = actual.siguiente
+            posicion += 1
+        return False
+
     def mostrar(self) -> Iterator:
         actual = self.cabeza
         while actual is not None:
             yield actual.dato
             actual = actual.siguiente
+
+    def __iter__(self):
+        return self.mostrar()
+
+    def __len__(self) -> int:
+        total = 0
+        actual = self.cabeza
+        while actual is not None:
+            total += 1
+            actual = actual.siguiente
+        return total
 
 
 class Nodo:
@@ -42,6 +76,8 @@ class Nodo:
 
 
 class ListaDoblementeEnlazada:
+    """Lista doblemente enlazada: lista de compras del usuario."""
+
     def __init__(self):
         self.cabeza: Optional[Nodo] = None
         self.cola: Optional[Nodo] = None
@@ -84,14 +120,35 @@ class ListaDoblementeEnlazada:
             actual = actual.siguiente
         return False
 
+    def obtener(self, indice: int):
+        if indice < 0:
+            indice += len(self)
+        for posicion, dato in enumerate(self.mostrar()):
+            if posicion == indice:
+                return dato
+        raise IndexError(f"Índice fuera de rango: {indice}")
+
     def mostrar(self) -> Iterator:
         actual = self.cabeza
         while actual is not None:
             yield actual.dato
             actual = actual.siguiente
 
+    def __iter__(self):
+        return self.mostrar()
+
+    def __len__(self) -> int:
+        total = 0
+        actual = self.cabeza
+        while actual is not None:
+            total += 1
+            actual = actual.siguiente
+        return total
+
 
 class CarritoCompras(SujetoObservable):
+    """Carrito observable: notifica a la vista en cada cambio."""
+
     def __init__(self):
         super().__init__()
         self._productos = []
@@ -101,12 +158,16 @@ class CarritoCompras(SujetoObservable):
         self._productos.append(producto)
         self.notificar_observadores(f"Producto '{producto.nombre}' añadido.")
 
-    def eliminar_producto(self, indice: int):
+    def eliminar_producto(self, indice: int) -> bool:
         if 0 <= indice < len(self._productos):
             eliminado = self._productos.pop(indice)
             self.notificar_observadores(f"Producto '{eliminado.nombre}' eliminado.")
             return True
         return False
+
+    def vaciar(self):
+        self._productos.clear()
+        self.notificar_observadores("Carrito vaciado.")
 
     def establecer_estrategia_descuento(self, estrategia):
         self._estrategia_descuento = estrategia
