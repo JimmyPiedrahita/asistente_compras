@@ -1,4 +1,5 @@
 import copy
+import uuid
 
 # PATRÓN 1: FACTORY METHOD
 
@@ -13,7 +14,8 @@ class Producto:
     tipo = "normal"
 
     def __init__(self, nombre: str, precio: float, marca: str = "Generica",
-                 categoria: str = "General"):
+                 categoria: str = "General", producto_id: str = None):
+        self.producto_id = producto_id or str(uuid.uuid4())
         self.nombre = nombre
         self.precio = precio
         self.marca = marca
@@ -35,8 +37,9 @@ class ProductoFisico(Producto):
     tipo = "fisico"
 
     def __init__(self, nombre: str, precio: float, costo_envio: float = 5.0,
-                 marca: str = "Generica", categoria: str = "General"):
-        super().__init__(nombre, precio, marca, categoria)
+                 marca: str = "Generica", categoria: str = "General",
+                 producto_id: str = None):
+        super().__init__(nombre, precio, marca, categoria, producto_id)
         self.costo_envio = costo_envio
 
     def obtener_precio_final(self) -> float:
@@ -47,6 +50,10 @@ class ProductoDigital(Producto):
     """Producto digital sin costo de envío."""
     tipo = "digital"
 
+    def __init__(self, nombre: str, precio: float, marca: str = "Generica",
+                 categoria: str = "General", producto_id: str = None):
+        super().__init__(nombre, precio, marca, categoria, producto_id)
+
     def obtener_precio_final(self) -> float:
         return self.precio
 
@@ -56,8 +63,9 @@ class ProductoSuscripcion(Producto):
     tipo = "suscripcion"
 
     def __init__(self, nombre: str, precio_mensual: float, meses: int = 1,
-                 marca: str = "Generica", categoria: str = "General"):
-        super().__init__(nombre, precio_mensual, marca, categoria)
+                 marca: str = "Generica", categoria: str = "General",
+                 producto_id: str = None):
+        super().__init__(nombre, precio_mensual, marca, categoria, producto_id)
         self.meses = meses
 
     def obtener_precio_final(self) -> float:
@@ -70,7 +78,7 @@ class FabricaProductos:
     @staticmethod
     def crear_producto(tipo: str, nombre: str, precio: float,
                         marca: str = "Generica", categoria: str = "General",
-                        **kwargs) -> Producto:
+                        producto_id: str = None, **kwargs) -> Producto:
         tipo_norm = normalizar_texto(tipo) or "normal"
         nombre = str(nombre or "").strip()
         if not nombre:
@@ -80,21 +88,21 @@ class FabricaProductos:
             raise ValueError("El precio no puede ser negativo")
 
         if tipo_norm in ("normal", "producto", ""):
-            return Producto(nombre, precio, marca, categoria)
+            return Producto(nombre, precio, marca, categoria, producto_id)
 
         if tipo_norm == "fisico":
             costo_envio = float(kwargs.get("costo_envio", 5.0))
             if costo_envio < 0:
                 raise ValueError("El costo de envío no puede ser negativo")
-            return ProductoFisico(nombre, precio, costo_envio, marca, categoria)
+            return ProductoFisico(nombre, precio, costo_envio, marca, categoria, producto_id)
 
         if tipo_norm == "digital":
-            return ProductoDigital(nombre, precio, marca, categoria)
+            return ProductoDigital(nombre, precio, marca, categoria, producto_id)
 
         if tipo_norm == "suscripcion":
             meses = int(kwargs.get("meses", 1))
             if meses < 1:
                 raise ValueError("Los meses deben ser al menos 1")
-            return ProductoSuscripcion(nombre, precio, meses, marca, categoria)
+            return ProductoSuscripcion(nombre, precio, meses, marca, categoria, producto_id)
 
         raise ValueError(f"Tipo de producto no soportado: {tipo}")

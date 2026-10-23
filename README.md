@@ -13,7 +13,8 @@ lista de compras).
 
 - Python 3.10 o superior
 - Tkinter (incluido en la mayoría de instalaciones de Python)
-- Sin dependencias externas
+- Sin dependencias externas para el modo en memoria. MongoDB requiere
+  `pymongo` (ver `requirements.txt`).
 
 En Debian/Ubuntu, si falta Tkinter: `sudo apt install python3-tk`
 
@@ -28,6 +29,46 @@ python3 main.py --consola
 
 # Omitir la impresión de la matriz de permisos al arrancar
 python3 main.py --sin-banner
+```
+
+## Persistencia MongoDB
+
+Por defecto la aplicación sigue usando memoria, lo que permite ejecutar las
+pruebas sin MongoDB. Para usar inventarios persistentes, instala la dependencia
+y define `MONGODB_URI`:
+
+```bash
+pip install -r requirements.txt
+MONGODB_URI=mongodb://localhost:27017 python3 main.py
+```
+
+La URI debe apuntar a un replica set o clúster, ya que el listener de
+sincronización usa Change Streams. La aplicación escribe solamente en
+`almacen_1.productos`, `almacen_2.productos` o `almacen_3.productos`.
+Ejecuta el listener en otro proceso:
+
+```bash
+MONGODB_URI=mongodb://localhost:27017 python3 run_listener.py
+```
+
+El listener usa un `MongoClient.watch()` global y replica hacia
+`comparador.productos` con consistencia eventual. Al iniciar la aplicación, los
+inventarios visibles se cargan directamente desde las bases dedicadas
+`almacen_X`, que son la fuente de verdad; por ello pueden mostrarse aunque el
+listener esté detenido. Cada documento requiere un
+`producto_id` estable y se replica con `_id` compuesto
+`{almacen_id}_{producto_id}`. Guarda el resume token en
+`comparador.sync_state`; si MongoDB devuelve `ChangeStreamHistoryLost` (286),
+realiza una reconciliación completa y reanuda desde un punto de corte anterior
+al escaneo.
+
+Para un replica set local de un nodo:
+
+```bash
+docker run --name compras-mongo -p 27017:27017 -d \
+  mongo:7 --replSet rs0 --bind_ip_all
+docker exec compras-mongo mongosh --eval \
+  'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
 ```
 
 Credenciales de administrador: **`admin123`**.
@@ -111,6 +152,8 @@ Pan, Arroz, Mouse, Monitor, Netflix, etc.) y ejemplos de los cuatro tipos:
 | `observer.py` | `SujetoObservable` reutilizable (Observer). |
 | `listas.py` | `ListaSimple`, `ListaDoblementeEnlazada` y `CarritoCompras`. |
 | `almacenes.py` | `Almacen` (inventario en lista simple) y `GestorAlmacenes`. |
+| `persistencia_mongodb.py` | Escrituras en las bases dedicadas y lectura de la proyección. |
+| `listener_mongodb.py` | Change Stream global y réplica idempotente a `comparador`. |
 | `estrategias.py` | Estrategias de descuento y de búsqueda (Strategy). |
 | `controlador.py` | Lógica de aplicación, sesiones, permisos y operaciones. |
 | `interfaz.py` | Vista Tkinter (menú, usuario, login y panel admin). |
@@ -152,6 +195,8 @@ el flujo completo del controlador (permisos, carrito, CSV y exportación).
 
 ## Limitaciones
 
-- Los datos viven en memoria: al cerrar la aplicación se reinician.
+- Sin `MONGODB_URI`, los datos viven en memoria: al cerrar la aplicación se reinician.
+- Con MongoDB, `comparador` tiene consistencia eventual mientras el listener
+  procesa los cambios.
 - Los usuarios son solo nombres; no hay contraseñas por usuario.
 - La clave de administrador es única y local.

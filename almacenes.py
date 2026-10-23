@@ -17,8 +17,9 @@ class Almacen:
 class GestorAlmacenes:
     """Gestiona la colección de almacenes del sistema."""
 
-    def __init__(self):
+    def __init__(self, persistencia=None):
         self.almacenes = []
+        self.persistencia = persistencia
 
     def agregar_almacen(self, almacen: Almacen):
         self.almacenes.append(almacen)
@@ -36,8 +37,18 @@ class GestorAlmacenes:
         almacen = self.obtener_almacen(id_almacen)
         if almacen is None:
             return False
+        if self.persistencia is not None:
+            self.persistencia.insertar(id_almacen, producto)
         almacen.inventario.agregar(producto)
         return True
+
+    def cargar_inventarios(self):
+        if self.persistencia is None:
+            return
+        for almacen in self.almacenes:
+            almacen.inventario = ListaSimple()
+            for producto in self.persistencia.cargar_almacen(almacen.id_almacen):
+                almacen.inventario.agregar(producto)
 
     def buscar_producto(self, id_almacen: int, nombre: str, marca: str = None):
         almacen = self.obtener_almacen(id_almacen)

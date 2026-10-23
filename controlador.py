@@ -13,11 +13,11 @@ from permisos import logger
 
 
 class ControladorCompras:
-    def __init__(self, carrito, vista):
+    def __init__(self, carrito, vista, gestor_almacenes=None):
         self.carrito = carrito
         self.vista = vista
         self.lista_compras = ListaDoblementeEnlazada()
-        self.gestor_almacenes = GestorAlmacenes()
+        self.gestor_almacenes = gestor_almacenes or GestorAlmacenes()
         self.estrategia_busqueda = BusquedaMejorPrecioStrategy()
         self.estrategia_catalogo = BusquedaCatalogoStrategy()
         self.comparador_global = MejorPrecioGlobalStrategy()
@@ -30,8 +30,10 @@ class ControladorCompras:
         self._nombre_consola = None
 
         for i in range(1, 4):
-            self.gestor_almacenes.agregar_almacen(
-                Almacen(id_almacen=i, nombre=f"Almacen {i}"))
+            if self.gestor_almacenes.obtener_almacen(i) is None:
+                self.gestor_almacenes.agregar_almacen(
+                    Almacen(id_almacen=i, nombre=f"Almacen {i}"))
+        self.gestor_almacenes.cargar_inventarios()
 
         # Conectamos la Vista como Observador del Carrito
         self.carrito.agregar_observador(self.vista)
@@ -159,6 +161,14 @@ class ControladorCompras:
             return False
         anterior = producto.precio
         producto.precio = nuevo_precio
+        if self.gestor_almacenes.persistencia is not None:
+            try:
+                self.gestor_almacenes.persistencia.actualizar(id_almacen, producto)
+            except (KeyError, OSError, RuntimeError):
+                producto.precio = anterior
+                logger.log("ADMIN", "Precio no actualizado",
+                           "No se pudo persistir en MongoDB")
+                return False
         logger.log("ADMIN", "Precio actualizado",
                    f"{producto.nombre}: ${anterior:.2f} -> ${nuevo_precio:.2f}")
         return True
