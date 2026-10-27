@@ -1,12 +1,12 @@
 import argparse
 import os
 
-from controlador import ControladorCompras
-from interfaz import InterfazUsuario
-from listas import CarritoCompras
+from controlador.controlador import ControladorCompras
+from vista.interfaz import InterfazUsuario
+from modelo.listas import CarritoCompras
 from permisos import mostrar_matriz_permisos, mostrar_relaciones_sistema
-from almacenes import GestorAlmacenes
-from persistencia_mongodb import MongoInventarioRepository
+from modelo.almacenes import GestorAlmacenes
+from modelo.persistencia_mongodb import MongoInventarioRepository
 
 # PATRÓN 5: BOOTSTRAPPER
 

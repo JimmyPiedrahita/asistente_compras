@@ -5,6 +5,10 @@ tres almacenes. El usuario arma una lista de compras, el sistema busca cada
 producto en los inventarios y permite agregar la mejor opción a un carrito con
 descuentos. Un administrador carga y edita los precios.
 
+El proyecto también incluye un backend REST preparado para que una interfaz
+externa (React, Angular, Astro u otra) consuma el negocio sin duplicar la
+lógica. En esta fase no se incluye una interfaz web.
+
 El proyecto es un ejercicio académico de **patrones de diseño** y **estructuras
 de datos implementadas a mano** (sin usar `list` para los inventarios ni para la
 lista de compras).
@@ -13,8 +17,8 @@ lista de compras).
 
 - Python 3.10 o superior
 - Tkinter (incluido en la mayoría de instalaciones de Python)
-- Sin dependencias externas para el modo en memoria. MongoDB requiere
-  `pymongo` (ver `requirements.txt`).
+- MongoDB para ejecutar la API real (ver `docker-compose.yml`).
+- Dependencias Python de `requirements.txt`.
 
 En Debian/Ubuntu, si falta Tkinter: `sudo apt install python3-tk`
 
@@ -30,6 +34,39 @@ python3 main.py --consola
 # Omitir la impresión de la matriz de permisos al arrancar
 python3 main.py --sin-banner
 ```
+
+## Backend REST
+
+La API es la **Vista HTTP** del MVC. `controlador/controlador.py` sigue siendo
+el único controlador y los módulos de `modelo/` contienen las reglas del
+negocio. MongoDB es obligatorio para iniciar el servidor; no existe un
+fallback silencioso a memoria.
+
+```bash
+pip install -r requirements.txt
+docker compose up -d
+MONGODB_URI=mongodb://localhost:27017 \
+  .venv/bin/uvicorn vista.api.app:create_app --factory --reload
+```
+
+La documentación interactiva queda disponible en
+`http://localhost:8000/docs` y el contrato para el frontend está en
+[`openapi.yaml`](openapi.yaml). La API usa sesiones temporales: el frontend
+debe conservar `session_id` y enviarlo en las rutas posteriores. Configura
+orígenes permitidos con `CORS_ORIGINS` separados por coma.
+
+Rutas principales:
+
+- `GET /api/health`: comprueba API y MongoDB.
+- `POST /api/sessions/user` y `POST /api/sessions/admin`: crean sesiones.
+- `POST/DELETE /api/sessions/{token}/shopping-list`: gestiona la lista.
+- `POST /api/sessions/{token}/search`: modos `mejor_precio`, `catalogo` o
+  `global`.
+- `GET/DELETE /api/sessions/{token}/cart` y rutas de ítems/descuentos.
+- Rutas `/admin/...` para alta, actualización de precios e importación CSV.
+
+La clave administrativa predeterminada es `admin123` y puede cambiarse con
+`ADMIN_CLAVE`.
 
 ## Persistencia MongoDB
 
@@ -147,18 +184,16 @@ Pan, Arroz, Mouse, Monitor, Netflix, etc.) y ejemplos de los cuatro tipos:
 
 | Archivo | Responsabilidad |
 |---|---|
-| `main.py` | Bootstrapper: parsea argumentos y cablea modelo, vista y controlador. |
-| `modelos.py` | Productos, Factory Method y utilidades de normalización. |
-| `observer.py` | `SujetoObservable` reutilizable (Observer). |
-| `listas.py` | `ListaSimple`, `ListaDoblementeEnlazada` y `CarritoCompras`. |
-| `almacenes.py` | `Almacen` (inventario en lista simple) y `GestorAlmacenes`. |
-| `persistencia_mongodb.py` | Escrituras en las bases dedicadas y lectura de la proyección. |
+| `main.py` | Bootstrapper de la aplicación de escritorio. |
+| `modelo/` | Modelo MVC: productos, listas, carrito, almacenes, estrategias y MongoDB. |
+| `controlador/controlador.py` | Único controlador: casos de uso, sesiones, permisos y coordinación. |
+| `vista/` | Vistas MVC: Tkinter, consola y API HTTP. |
+| `vista/api/` | Rutas REST, DTOs, sesiones HTTP y errores JSON. |
+| `openapi.yaml` | Contrato consumible por la interfaz externa. |
 | `listener_mongodb.py` | Change Stream global y réplica idempotente a `comparador`. |
-| `estrategias.py` | Estrategias de descuento y de búsqueda (Strategy). |
-| `controlador.py` | Lógica de aplicación, sesiones, permisos y operaciones. |
-| `interfaz.py` | Vista Tkinter (menú, usuario, login y panel admin). |
 | `permisos.py` | Matriz de permisos por rol y `Logger`. |
 | `pruebas.py` | Pruebas unitarias con `unittest`. |
+| `pruebas_api.py` | Pruebas de integración de la API con persistencia simulada. |
 | `pruebas_gui.py` | Prueba de humo de la interfaz Tkinter. |
 
 ## Patrones de diseño
@@ -187,6 +222,7 @@ consola con el resultado (`CONCEDIDO` / `DENEGADO`).
 ```bash
 python3 -m compileall -q .
 python3 pruebas.py
+python3 pruebas_api.py
 python3 pruebas_gui.py        # requiere display; en CI: xvfb-run python3 pruebas_gui.py
 ```
 
@@ -195,7 +231,8 @@ el flujo completo del controlador (permisos, carrito, CSV y exportación).
 
 ## Limitaciones
 
-- Sin `MONGODB_URI`, los datos viven en memoria: al cerrar la aplicación se reinician.
+- Sin `MONGODB_URI`, la aplicación de escritorio mantiene su comportamiento en
+  memoria; la API, en cambio, no inicia.
 - Con MongoDB, `comparador` tiene consistencia eventual mientras el listener
   procesa los cambios.
 - Los usuarios son solo nombres; no hay contraseñas por usuario.
