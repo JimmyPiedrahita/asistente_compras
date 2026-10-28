@@ -1,183 +1,1224 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Asistente de Compras API
-  version: 1.0.0
-  description: API REST del backend MVC. MongoDB es obligatorio en ejecución real.
+  description: API REST MVC del asistente de compras multi-almacén. Cada almacén usa
+    una base de datos MongoDB independiente.
+  version: 3.0.0
 servers:
-  - url: http://localhost:8000/api
+- url: http://localhost:8000
+  description: Servidor local
 paths:
-  /health:
+  /api/v1/health:
     get:
-      summary: Comprueba API y MongoDB
+      tags:
+      - Salud
+      summary: Health
+      operationId: health_api_v1_health_get
       responses:
-        "200":
-          description: Servicio disponible
-  /sessions/user:
-    post:
-      summary: Inicia sesión de cliente
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [nombre]
-              properties:
-                nombre: {type: string, minLength: 1}
-      responses:
-        "201": {description: Sesión creada}
-  /sessions/admin:
-    post:
-      summary: Inicia sesión de administrador
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [clave]
-              properties:
-                clave: {type: string}
-      responses:
-        "201": {description: Sesión creada}
-        "401": {description: Clave inválida}
-  /sessions/{token}:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthRespuesta'
+  /api/v1/health/live:
     get:
-      summary: Obtiene el estado de la sesión
+      tags:
+      - Salud
+      summary: Health Live
+      operationId: health_live_api_v1_health_live_get
       responses:
-        "200": {description: Estado, lista y carrito}
-        "401": {description: Sesión inválida}
-    delete:
-      summary: Cierra la sesión
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthRespuesta'
+  /api/v1/health/ready:
+    get:
+      tags:
+      - Salud
+      summary: Health Ready
+      operationId: health_ready_api_v1_health_ready_get
       responses:
-        "204": {description: Sesión cerrada}
-  /sessions/{token}/shopping-list:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
-    post:
-      summary: Agrega un producto a la lista
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [nombre]
-              properties:
-                nombre: {type: string}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthRespuesta'
+  /api/v1/warehouses:
+    get:
+      tags:
+      - Almacenes
+      summary: Listar Almacenes
+      operationId: listar_almacenes_api_v1_warehouses_get
       responses:
-        "200": {description: Lista actualizada}
-    delete:
-      summary: Elimina un producto de la lista
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/AlmacenRespuesta'
+                type: array
+                title: Response Listar Almacenes Api V1 Warehouses Get
+  /api/v1/warehouses/{almacen_id}/products:
+    get:
+      tags:
+      - Almacenes
+      summary: Listar Productos
+      operationId: listar_productos_api_v1_warehouses__almacen_id__products_get
       parameters:
-        - in: path
-          name: nombre
-          required: true
-          schema: {type: string}
-      responses:
-        "200": {description: Lista actualizada}
-  /sessions/{token}/search:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
-    post:
-      summary: Ejecuta una búsqueda
-      requestBody:
+      - name: almacen_id
+        in: path
         required: true
+        schema:
+          type: integer
+          title: Almacen Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductoRespuesta'
+                title: Response Listar Productos Api V1 Warehouses  Almacen Id  Products
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/user:
+    post:
+      tags:
+      - Sesiones
+      summary: Iniciar Usuario
+      operationId: iniciar_usuario_api_v1_sessions_user_post
+      requestBody:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                modo:
-                  type: string
-                  enum: [mejor_precio, catalogo, global]
-                  default: mejor_precio
+              $ref: '#/components/schemas/UsuarioSesion'
+        required: true
       responses:
-        "200": {description: Resultados serializados}
-  /sessions/{token}/cart:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SesionCreada'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/admin:
+    post:
+      tags:
+      - Sesiones
+      summary: Iniciar Admin
+      operationId: iniciar_admin_api_v1_sessions_admin_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaveAdministrador'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SesionCreada'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}:
     get:
-      summary: Obtiene el carrito
+      tags:
+      - Sesiones
+      summary: Estado Sesion
+      operationId: estado_sesion_api_v1_sessions__token__get
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
-        "200": {description: Resumen del carrito}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoSesion'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
-      summary: Vacía el carrito
+      tags:
+      - Sesiones
+      summary: Cerrar Sesion
+      operationId: cerrar_sesion_api_v1_sessions__token__delete
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
-        "200": {description: Carrito actualizado}
-  /sessions/{token}/cart/items:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/shopping-list:
+    get:
+      tags:
+      - Lista de compras
+      summary: Obtener Lista
+      operationId: obtener_lista_api_v1_sessions__token__shopping_list_get
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
-      summary: Agrega un producto por identificador estable
+      tags:
+      - Lista de compras
+      summary: Agregar A Lista
+      operationId: agregar_a_lista_api_v1_sessions__token__shopping_list_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [almacen_id, producto_id]
-              properties:
-                almacen_id: {type: integer}
-                producto_id: {type: string}
+              $ref: '#/components/schemas/ListaProductoSolicitud'
       responses:
-        "200": {description: Carrito actualizado}
-  /sessions/{token}/cart/items/{indice}:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
-      - in: path
-        name: indice
-        required: true
-        schema: {type: integer}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/shopping-list/{nombre}:
     delete:
-      summary: Quita un ítem del carrito
+      tags:
+      - Lista de compras
+      summary: Eliminar De Lista
+      operationId: eliminar_de_lista_api_v1_sessions__token__shopping_list__nombre__delete
+      parameters:
+      - name: nombre
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Nombre
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
-        "200": {description: Carrito actualizado}
-  /sessions/{token}/cart/discount:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/search:
     post:
-      summary: Aplica descuento
+      tags:
+      - Búsqueda
+      summary: Buscar
+      operationId: buscar_api_v1_sessions__token__search_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [tipo]
-              properties:
-                tipo: {type: string, enum: [sin, porcentaje, fijo]}
-                valor: {type: number, minimum: 0}
+              $ref: '#/components/schemas/BusquedaSolicitud'
       responses:
-        "200": {description: Carrito actualizado}
-  /sessions/{token}/admin/warehouses/{almacen_id}/products:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
-      - in: path
-        name: almacen_id
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusquedaRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/cart:
+    get:
+      tags:
+      - Carrito
+      summary: Obtener Carrito
+      operationId: obtener_carrito_api_v1_sessions__token__cart_get
+      parameters:
+      - name: token
+        in: path
         required: true
-        schema: {type: integer}
-    post:
-      summary: Crea un producto (ADMIN)
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
-        "200": {description: Producto creado}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenCarrito'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Carrito
+      summary: Vaciar Carrito
+      operationId: vaciar_carrito_api_v1_sessions__token__cart_delete
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenCarrito'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/cart/items:
+    post:
+      tags:
+      - Carrito
+      summary: Agregar Item
+      operationId: agregar_item_api_v1_sessions__token__cart_items_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CarritoProductoSolicitud'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenCarrito'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/cart/items/{indice}:
+    delete:
+      tags:
+      - Carrito
+      summary: Quitar Item
+      operationId: quitar_item_api_v1_sessions__token__cart_items__indice__delete
+      parameters:
+      - name: indice
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Indice
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenCarrito'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/cart/discount:
+    post:
+      tags:
+      - Carrito
+      summary: Aplicar Descuento
+      operationId: aplicar_descuento_api_v1_sessions__token__cart_discount_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DescuentoSolicitud'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenCarrito'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/admin/warehouses/{almacen_id}/products:
+    post:
+      tags:
+      - Administración
+      summary: Agregar Producto
+      operationId: agregar_producto_api_v1_sessions__token__admin_warehouses__almacen_id__products_post
+      parameters:
+      - name: almacen_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Almacen Id
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoSolicitud'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     patch:
-      summary: Actualiza precio por producto_id (ADMIN)
+      tags:
+      - Administración
+      summary: Editar Precio
+      operationId: editar_precio_api_v1_sessions__token__admin_warehouses__almacen_id__products_patch
+      parameters:
+      - name: almacen_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Almacen Id
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrecioSolicitud'
       responses:
-        "200": {description: Precio actualizado}
-  /sessions/{token}/admin/csv:
-    parameters:
-      - {$ref: "#/components/parameters/Token"}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/admin/csv:
     post:
-      summary: Importa CSV (ADMIN)
+      tags:
+      - Administración
+      summary: Cargar Csv
+      operationId: cargar_csv_api_v1_sessions__token__admin_csv_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CsvSolicitud'
       responses:
-        "200": {description: Resultado de importación}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportacionCsvRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/admin/reload:
+    post:
+      tags:
+      - Administración
+      summary: Recargar Inventarios
+      operationId: recargar_inventarios_api_v1_sessions__token__admin_reload_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/export/shopping-list:
+    get:
+      tags:
+      - Exportación
+      summary: Exportar Lista
+      operationId: exportar_lista_api_v1_sessions__token__export_shopping_list_get
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/export/cart:
+    get:
+      tags:
+      - Exportación
+      summary: Exportar Carrito
+      operationId: exportar_carrito_api_v1_sessions__token__export_cart_get
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
-  parameters:
-    Token:
-      in: path
-      name: token
-      required: true
-      schema: {type: string}
+  schemas:
+    AlmacenRespuesta:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        products:
+          type: integer
+          title: Products
+      type: object
+      required:
+      - id
+      - name
+      - products
+      title: AlmacenRespuesta
+    BusquedaRespuesta:
+      properties:
+        modo:
+          type: string
+          title: Modo
+        resultados:
+          items:
+            $ref: '#/components/schemas/ResultadoBusquedaItem'
+          type: array
+          title: Resultados
+      type: object
+      required:
+      - modo
+      - resultados
+      title: BusquedaRespuesta
+    BusquedaSolicitud:
+      properties:
+        modo:
+          type: string
+          enum:
+          - mejor_precio
+          - catalogo
+          - global
+          title: Modo
+          default: mejor_precio
+      type: object
+      title: BusquedaSolicitud
+    CarritoProductoSolicitud:
+      properties:
+        almacen_id:
+          type: integer
+          minimum: 1.0
+          title: Almacen Id
+        producto_id:
+          type: string
+          minLength: 1
+          title: Producto Id
+      type: object
+      required:
+      - almacen_id
+      - producto_id
+      title: CarritoProductoSolicitud
+    ClaveAdministrador:
+      properties:
+        clave:
+          type: string
+          minLength: 1
+          title: Clave
+      type: object
+      required:
+      - clave
+      title: ClaveAdministrador
+    CsvSolicitud:
+      properties:
+        contenido:
+          type: string
+          minLength: 1
+          title: Contenido
+      type: object
+      required:
+      - contenido
+      title: CsvSolicitud
+    DescuentoSolicitud:
+      properties:
+        tipo:
+          type: string
+          enum:
+          - sin
+          - porcentaje
+          - fijo
+          title: Tipo
+        valor:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Valor
+      type: object
+      required:
+      - tipo
+      title: DescuentoSolicitud
+    EstadoSesion:
+      properties:
+        usuario:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Usuario
+        rol:
+          type: string
+          title: Rol
+        lista:
+          items:
+            type: string
+          type: array
+          title: Lista
+        carrito:
+          $ref: '#/components/schemas/ResumenCarrito'
+      type: object
+      required:
+      - usuario
+      - rol
+      - lista
+      - carrito
+      title: EstadoSesion
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthRespuesta:
+      properties:
+        status:
+          type: string
+          title: Status
+        database:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Database
+      type: object
+      required:
+      - status
+      title: HealthRespuesta
+    ImportacionCsvRespuesta:
+      properties:
+        importados:
+          type: integer
+          title: Importados
+        rechazados:
+          type: integer
+          title: Rechazados
+        errores:
+          items:
+            type: string
+          type: array
+          title: Errores
+      type: object
+      required:
+      - importados
+      - rechazados
+      - errores
+      title: ImportacionCsvRespuesta
+    ListaProductoSolicitud:
+      properties:
+        nombre:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Nombre
+      type: object
+      required:
+      - nombre
+      title: ListaProductoSolicitud
+    ListaRespuesta:
+      properties:
+        lista:
+          items:
+            type: string
+          type: array
+          title: Lista
+      type: object
+      required:
+      - lista
+      title: ListaRespuesta
+    OkRespuesta:
+      properties:
+        ok:
+          type: boolean
+          title: Ok
+          default: true
+      type: object
+      title: OkRespuesta
+    PrecioSolicitud:
+      properties:
+        producto_id:
+          type: string
+          minLength: 1
+          title: Producto Id
+        precio:
+          type: number
+          minimum: 0.0
+          title: Precio
+      type: object
+      required:
+      - producto_id
+      - precio
+      title: PrecioSolicitud
+    ProductoRespuesta:
+      properties:
+        producto_id:
+          type: string
+          title: Producto Id
+        nombre:
+          type: string
+          title: Nombre
+        marca:
+          type: string
+          title: Marca
+        categoria:
+          type: string
+          title: Categoria
+        tipo:
+          type: string
+          title: Tipo
+        precio:
+          type: number
+          title: Precio
+        precio_final:
+          type: number
+          title: Precio Final
+        costo_envio:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Costo Envio
+        meses:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Meses
+      type: object
+      required:
+      - producto_id
+      - nombre
+      - marca
+      - categoria
+      - tipo
+      - precio
+      - precio_final
+      title: ProductoRespuesta
+    ProductoSolicitud:
+      properties:
+        nombre:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Nombre
+        precio:
+          type: number
+          minimum: 0.0
+          title: Precio
+        marca:
+          type: string
+          maxLength: 120
+          title: Marca
+          default: Generica
+        categoria:
+          type: string
+          maxLength: 120
+          title: Categoria
+          default: General
+        tipo:
+          type: string
+          enum:
+          - normal
+          - fisico
+          - digital
+          - suscripcion
+          title: Tipo
+          default: normal
+        costo_envio:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Costo Envio
+        meses:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Meses
+      type: object
+      required:
+      - nombre
+      - precio
+      title: ProductoSolicitud
+    ResultadoBusquedaItem:
+      properties:
+        almacen_id:
+          type: integer
+          title: Almacen Id
+        almacen:
+          type: string
+          title: Almacen
+        producto:
+          $ref: '#/components/schemas/ProductoRespuesta'
+      type: object
+      required:
+      - almacen_id
+      - almacen
+      - producto
+      title: ResultadoBusquedaItem
+    ResumenCarrito:
+      properties:
+        productos:
+          items:
+            $ref: '#/components/schemas/ProductoRespuesta'
+          type: array
+          title: Productos
+        subtotal:
+          type: number
+          title: Subtotal
+        total:
+          type: number
+          title: Total
+        descuento:
+          type: string
+          title: Descuento
+      type: object
+      required:
+      - productos
+      - subtotal
+      - total
+      - descuento
+      title: ResumenCarrito
+    SesionCreada:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        usuario:
+          type: string
+          title: Usuario
+        rol:
+          type: string
+          title: Rol
+      type: object
+      required:
+      - session_id
+      - usuario
+      - rol
+      title: SesionCreada
+    UsuarioSesion:
+      properties:
+        nombre:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Nombre
+      type: object
+      required:
+      - nombre
+      title: UsuarioSesion
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+tags:
+- name: Salud
+  description: Disponibilidad de la API y MongoDB.
+- name: Almacenes
+  description: Almacenes e inventarios.
+- name: Sesiones
+  description: Sesiones de cliente y administrador.
+- name: Lista de compras
+  description: Lista personal del cliente.
+- name: Búsqueda
+  description: Comparación entre almacenes.
+- name: Carrito
+  description: Carrito y descuentos.
+- name: Administración
+  description: Alta, precios y CSV.
+- name: Exportación
+  description: Descarga de listas y carrito en CSV.

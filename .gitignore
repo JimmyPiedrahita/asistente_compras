@@ -3,6 +3,8 @@
 venv/
 env/
 ENV/
+.direnv/
+.envrc
 
 # Python
 __pycache__/
@@ -10,34 +12,53 @@ __pycache__/
 *$py.class
 *.so
 .Python
-
-# Distribución y empaquetado
-build/
-dist/
+*.egg
 *.egg-info/
 .eggs/
+build/
+dist/
 pip-wheel-metadata/
+*.whl
 
-# Herramientas de pruebas y cobertura
+# Pruebas, cobertura y cachés de herramientas
 .pytest_cache/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 .tox/
 .nox/
-
-# Type checkers y linters
+.hypothesis/
 .mypy_cache/
 .pyre/
 .ruff_cache/
+.cache/
+junit*.xml
+nosetests.xml
 
 # Variables de entorno y secretos locales
 .env
 .env.*
 !.env.example
 
+# Logs, temporales y archivos de proceso
+*.log
+logs/
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+*.pid
+*.sock
+
+# Datos locales de MongoDB (el compose usa un volumen con nombre)
+mongo_data/
+
 # Editores y sistema operativo
 .vscode/
 .idea/
+*.iml
 .DS_Store
 Thumbs.db
+desktop.ini
