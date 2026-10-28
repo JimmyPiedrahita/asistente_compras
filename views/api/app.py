@@ -4,8 +4,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from modelo.almacenes import GestorAlmacenes
-from modelo.persistencia_mongodb import MongoInventarioRepository
+from models.almacenes import Almacen, GestorAlmacenes
+from models.persistencia_mongodb import MongoInventarioRepository
 
 from .errores import ApiError
 from .rutas import crear_router
@@ -22,12 +22,16 @@ def create_app(
         raise RuntimeError("MONGODB_URI es obligatorio para iniciar la API")
     persistencia = repository_factory(uri)
     gestor = GestorAlmacenes(persistencia)
+    for id_almacen in range(1, 4):
+        gestor.agregar_almacen(
+            Almacen(id_almacen=id_almacen, nombre=f"Almacen {id_almacen}")
+        )
     sesiones = RegistroSesiones(gestor)
 
     app = FastAPI(
         title="Asistente de Compras API",
-        version="1.0.0",
-        description="Backend MVC para el comparador de precios.",
+        version="2.0.0",
+        description="API REST del asistente de compras multi-almacén.",
     )
     origenes = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
     app.add_middleware(
@@ -45,5 +49,7 @@ def create_app(
             content={"error": error.detail},
         )
 
-    app.include_router(crear_router(sesiones, persistencia), prefix="/api")
+    router = crear_router(sesiones, persistencia)
+    app.include_router(router, prefix="/api", include_in_schema=False)
+    app.include_router(router, prefix="/api/v1", include_in_schema=True)
     return app

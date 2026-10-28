@@ -2,18 +2,20 @@ import os
 import tempfile
 import unittest
 
-from almacenes import Almacen, GestorAlmacenes
-from controlador import ControladorCompras
-from estrategias import (DescuentoFijo, DescuentoPorcentaje, SinDescuento,
-                         BusquedaMejorPrecioStrategy, BusquedaCatalogoStrategy,
-                         MejorPrecioGlobalStrategy)
-from listas import CarritoCompras, ListaDoblementeEnlazada, ListaSimple
-from modelos import (FabricaProductos, Producto, ProductoDigital,
-                     ProductoFisico, ProductoSuscripcion)
+from models.almacenes import Almacen, GestorAlmacenes
+from controllers import ControladorCompras
+from models.estrategias import (
+    DescuentoFijo, DescuentoPorcentaje, SinDescuento,
+    BusquedaMejorPrecioStrategy, BusquedaCatalogoStrategy,
+    MejorPrecioGlobalStrategy)
+from models.listas import CarritoCompras, ListaDoblementeEnlazada, ListaSimple
+from models.modelos import (
+    FabricaProductos, Producto, ProductoDigital, ProductoFisico,
+    ProductoSuscripcion)
 
 
 class VistaFalsa:
-    """Doble de la vista: no usa Tkinter."""
+    """Doble del observador HTTP para probar el controlador."""
 
     def __init__(self):
         self.notificaciones = []

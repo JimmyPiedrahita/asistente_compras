@@ -2,7 +2,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from vista.api.app import create_app
+from views.api.app import create_app
 
 
 class _Admin:
@@ -78,6 +78,15 @@ class PruebasApi(unittest.TestCase):
     def test_sesion_invalida(self):
         respuesta = self.cliente.get("/api/sessions/inexistente")
         self.assertEqual(respuesta.status_code, 401)
+
+    def test_api_v1_expone_health_y_almacenes(self):
+        health = self.cliente.get("/api/v1/health/live")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json(), {"status": "ok"})
+
+        almacenes = self.cliente.get("/api/v1/warehouses")
+        self.assertEqual(almacenes.status_code, 200)
+        self.assertEqual([item["id"] for item in almacenes.json()], [1, 2, 3])
 
 
 if __name__ == "__main__":

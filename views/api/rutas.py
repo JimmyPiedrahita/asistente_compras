@@ -71,6 +71,26 @@ def crear_router(sesiones, persistencia) -> APIRouter:
         persistencia.client.admin.command("ping")
         return {"status": "ok", "database": "mongodb"}
 
+    @router.get("/health/live")
+    def health_live():
+        return {"status": "ok"}
+
+    @router.get("/health/ready")
+    def health_ready():
+        persistencia.client.admin.command("ping")
+        return {"status": "ready", "database": "mongodb"}
+
+    @router.get("/warehouses")
+    def listar_almacenes():
+        return [
+            {
+                "id": almacen.id_almacen,
+                "name": almacen.nombre,
+                "products": len(almacen.inventario),
+            }
+            for almacen in sesiones.obtener_almacenes()
+        ]
+
     @router.post("/sessions/user", status_code=201)
     def iniciar_usuario(datos: UsuarioSesion):
         nueva = sesiones.crear()

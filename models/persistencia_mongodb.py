@@ -1,14 +1,10 @@
-"""Persistencia del inventario en MongoDB.
-
-La aplicación solo escribe en la base dedicada de cada almacén. La colección
-``comparador.productos`` es una proyección mantenida por ``listener_mongodb``.
-"""
+"""Persistencia del inventario en una base MongoDB por almacén."""
 
 from .modelos import FabricaProductos
 
 
 class MongoInventarioRepository:
-    def __init__(self, uri: str, base_comparador: str = "comparador"):
+    def __init__(self, uri: str, prefijo_almacen: str = "warehouse"):
         try:
             from pymongo import MongoClient
         except ImportError as error:
@@ -18,13 +14,13 @@ class MongoInventarioRepository:
 
         self.client = MongoClient(uri, serverSelectionTimeoutMS=5000)
         self.client.admin.command("ping")
-        self.base_comparador = base_comparador
-        self.client[base_comparador].productos.create_index(
-            [("nombre_normalizado", 1), ("almacen_id", 1)]
-        )
+        self.prefijo_almacen = prefijo_almacen
 
     def _coleccion(self, id_almacen: int):
-        return self.client[f"almacen_{id_almacen}"].productos
+        coleccion = self.client[f"{self.prefijo_almacen}_{id_almacen}"].productos
+        coleccion.create_index("producto_id", unique=True)
+        coleccion.create_index("nombre_normalizado")
+        return coleccion
 
     @staticmethod
     def _documento(producto):
@@ -63,12 +59,6 @@ class MongoInventarioRepository:
 
     def cargar_almacen(self, id_almacen: int):
         return [self._producto(doc) for doc in self._coleccion(id_almacen).find()]
-
-    def cargar_comparador(self):
-        productos = {}
-        for doc in self.client[self.base_comparador].productos.find():
-            productos.setdefault(int(doc["almacen_id"]), []).append(self._producto(doc))
-        return productos
 
     def insertar(self, id_almacen: int, producto):
         self._coleccion(id_almacen).insert_one(self._documento(producto))

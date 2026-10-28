@@ -1,22 +1,32 @@
 import csv
 import os
 
-from modelo.almacenes import Almacen, GestorAlmacenes
-from modelo.estrategias import (
+from models.almacenes import Almacen, GestorAlmacenes
+from models.estrategias import (
     SinDescuento, DescuentoPorcentaje, DescuentoFijo,
     BusquedaMejorPrecioStrategy, BusquedaCatalogoStrategy,
     MejorPrecioGlobalStrategy)
-from modelo.listas import ListaDoblementeEnlazada
-from modelo.modelos import FabricaProductos, normalizar_texto
+from models.listas import ListaDoblementeEnlazada
+from models.modelos import FabricaProductos, normalizar_texto
 from permisos import logger
 
 # PATRÓN 4: MODELO_VISTA_CONTROLADOR
 
 
+class _VistaNula:
+    """Observador interno para ejecutar casos de uso sin una UI."""
+
+    def actualizar(self, sujeto, mensaje: str):
+        return None
+
+    def notificar_denegado(self, permiso: str):
+        return None
+
+
 class ControladorCompras:
-    def __init__(self, carrito, vista, gestor_almacenes=None):
+    def __init__(self, carrito, vista=None, gestor_almacenes=None):
         self.carrito = carrito
-        self.vista = vista
+        self.vista = vista or _VistaNula()
         self.lista_compras = ListaDoblementeEnlazada()
         self.gestor_almacenes = gestor_almacenes or GestorAlmacenes()
         self.estrategia_busqueda = BusquedaMejorPrecioStrategy()
@@ -371,202 +381,3 @@ class ControladorCompras:
         logger.log("CLIENTE", "Carrito exportado",
                    f"{len(resumen['productos'])} ítems -> {ruta}")
         return {"ok": True, "filas": len(resumen["productos"])}
-
-    # = MODO CONSOLA (alternativo a la GUI) =
-
-    def ejecutar(self):
-        print("\n=== MODO CONSOLA ===")
-        nombre = input("Usuario [Cliente]: ").strip() or "Cliente"
-        self.registrar_usuario(nombre)
-        if not self.iniciar_sesion(nombre):
-            print("No se pudo iniciar sesión.")
-            return
-        self._nombre_consola = nombre
-
-        while True:
-            print("\n1) Agregar producto al carrito")
-            print("2) Ver carrito")
-            print("3) Eliminar producto del carrito")
-            print("4) Aplicar descuento")
-            print("5) Agregar producto a mi lista de compras")
-            print("6) Ver mi lista de compras")
-            print("7) Buscar mejores precios")
-            print("8) Ver almacenes")
-            print("9) Administrar almacenes (ADMIN)")
-            print("10) Salir")
-            opcion = input("Elija una opción: ").strip()
-
-            if opcion == "1":
-                self.agregar_producto()
-            elif opcion == "2":
-                self.mostrar_carrito()
-            elif opcion == "3":
-                self.eliminar_producto()
-            elif opcion == "4":
-                self.aplicar_descuento()
-            elif opcion == "5":
-                self.agregar_producto_lista()
-            elif opcion == "6":
-                self.ver_lista_compras()
-            elif opcion == "7":
-                self.buscar_mejores_precios()
-            elif opcion == "8":
-                self.ver_almacenes()
-            elif opcion == "9":
-                self.menu_admin_consola()
-            elif opcion == "10":
-                print("\n¡Gracias por usar el Asistente de Compras!")
-                break
-            else:
-                print("\nOpción no válida. Intente de nuevo.")
-
-    def agregar_producto(self):
-        try:
-            tipo = input("Tipo (normal/fisico/digital/suscripcion) [normal]: ").strip() or "normal"
-            nombre = input("Nombre: ").strip()
-            precio = float(input("Precio: "))
-            extra = {}
-            if tipo == "fisico":
-                extra["costo_envio"] = float(input("Costo de envío [5.0]: ") or "5.0")
-            elif tipo == "suscripcion":
-                extra["meses"] = int(input("Número de meses [1]: ") or "1")
-            producto = FabricaProductos.crear_producto(tipo, nombre, precio, **extra)
-            if self.agregar_producto_carrito(producto):
-                print(f"\nAgregado: {producto}")
-        except (ValueError, TypeError) as error:
-            print(f"\nError al agregar el producto: {error}")
-
-    def agregar_producto_lista(self):
-        nombre = input("Producto para la lista: ").strip()
-        estado = self.agregar_producto_usuario(nombre)
-        if estado == "ok":
-            print("Producto agregado a la lista.")
-        elif estado == "duplicado":
-            print("Ese producto ya está en la lista.")
-        elif estado == "vacio":
-            print("El nombre no puede estar vacío.")
-
-    def ver_lista_compras(self):
-        compras = self.obtener_compras_usuario()
-        if not compras:
-            print("\nSu lista de compras está vacía.")
-            return
-        print("\n--- MI LISTA DE COMPRAS ---")
-        for indice, nombre in enumerate(compras, start=1):
-            print(f" {indice}. {nombre}")
-
-    def menu_admin_consola(self):
-        clave = input("Clave admin: ").strip()
-        if not self.login_admin(clave):
-            print("Clave incorrecta.")
-            return
-
-        while True:
-            print("\n--- ADMINISTRACIÓN ---")
-            print("1) Agregar producto a un almacén")
-            print("2) Cargar inventario desde CSV")
-            print("3) Volver al menú de cliente")
-            opcion = input("Opción: ").strip()
-            if opcion == "1":
-                self.agregar_producto_almacen_consola()
-            elif opcion == "2":
-                self.cargar_csv_consola()
-            elif opcion == "3":
-                break
-            else:
-                print("Opción no válida.")
-
-        self.cerrar_sesion()
-        nombre = getattr(self, "_nombre_consola", "Cliente")
-        if self.iniciar_sesion(nombre):
-            print(f"Sesión restaurada como {nombre}.")
-
-    def agregar_producto_almacen_consola(self):
-        try:
-            id_almacen = int(input("ID de almacén (1-3): "))
-            tipo = input("Tipo (normal/fisico/digital/suscripcion) [normal]: ").strip() or "normal"
-            nombre = input("Nombre: ").strip()
-            marca = input("Marca [Generica]: ").strip() or "Generica"
-            categoria = input("Categoría [General]: ").strip() or "General"
-            precio = float(input("Precio: "))
-            extra = input("Extra (envío / meses) [opcional]: ").strip()
-            kwargs = {}
-            if tipo == "fisico":
-                kwargs["costo_envio"] = float(extra) if extra else 5.0
-            elif tipo == "suscripcion":
-                kwargs["meses"] = int(extra) if extra else 1
-            if self.agregar_producto_almacen(
-                    id_almacen, nombre, precio, marca=marca,
-                    categoria=categoria, tipo=tipo, **kwargs):
-                print("Producto agregado al almacén.")
-            else:
-                print("No se pudo agregar (revise el almacén o los datos).")
-        except (ValueError, TypeError) as error:
-            print(f"Error: {error}")
-
-    def cargar_csv_consola(self):
-        ruta = input("Ruta del archivo CSV: ").strip()
-        if not ruta:
-            print("Ruta vacía.")
-            return
-        resultado = self.cargar_csv(ruta)
-        print(f"Importados: {resultado['importados']} | "
-              f"Rechazados: {resultado['rechazados']}")
-        for error in resultado["errores"][:10]:
-            print(f"  - {error}")
-
-    def mostrar_carrito(self):
-        resumen = self.obtener_resumen_carrito()
-        self.vista.mostrar_carrito(resumen["productos"], resumen["subtotal"],
-                                   resumen["total"], resumen["descuento"])
-
-    def eliminar_producto(self):
-        self.mostrar_carrito()
-        if not self.carrito.obtener_productos():
-            return
-        try:
-            indice = int(input("Número de producto a eliminar: ")) - 1
-            if not self.quitar_producto_carrito(indice):
-                print("Índice inválido.")
-        except ValueError:
-            print("Por favor ingrese un número válido.")
-
-    def aplicar_descuento(self):
-        print("1) Sin descuento\n2) Porcentaje\n3) Monto fijo")
-        opcion = input("Opción: ").strip()
-        valor = None
-        if opcion == "2":
-            valor = input("Porcentaje (ej: 15): ").strip()
-            opcion = "porcentaje"
-        elif opcion == "3":
-            valor = input("Monto fijo a descontar ($): ").strip()
-            opcion = "fijo"
-        elif opcion == "1":
-            opcion = "sin"
-        estado = self.establecer_descuento(opcion, valor)
-        if estado == "invalido":
-            print("Valor de descuento inválido.")
-
-    def buscar_mejores_precios(self):
-        if not self._autorizar("comparar"):
-            return
-        filas = self.comparador_global.buscar(self.lista_compras,
-                                              self.gestor_almacenes)
-        if not filas:
-            print("\nSin coincidencias. Agregue productos a su lista desde la GUI "
-                  "o revise el inventario de los almacenes.")
-            return
-        print("\nMejor precio global:")
-        for fila in filas:
-            print(f"  {fila['nombre']:<20} ${fila['precio']:>8.2f}  "
-                  f"en {fila['almacen'].nombre}")
-
-    def ver_almacenes(self):
-        if not self._autorizar("comparar"):
-            return
-        for almacen in self.gestor_almacenes.obtener_almacenes():
-            print(f"\n--- {almacen.nombre} ---")
-            if almacen.inventario.esta_vacia():
-                print("  (vacío)")
-            for producto in almacen.inventario.mostrar():
-                print(f"  {producto}")

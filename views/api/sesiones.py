@@ -1,8 +1,8 @@
 import secrets
 from dataclasses import dataclass
 
-from controlador.controlador import ControladorCompras
-from modelo.listas import CarritoCompras
+from controllers.controlador import ControladorCompras
+from models.listas import CarritoCompras
 
 
 class VistaApi:
@@ -40,3 +40,6 @@ class RegistroSesiones:
 
     def eliminar(self, token: str) -> None:
         self._sesiones.pop(token, None)
+
+    def obtener_almacenes(self):
+        return self._gestor_almacenes.obtener_almacenes()

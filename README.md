@@ -1,239 +1,88 @@
-# Asistente de Compras Inteligente
+# Asistente de compras
 
-Aplicación de escritorio en Python que simula un comparador de precios entre
-tres almacenes. El usuario arma una lista de compras, el sistema busca cada
-producto en los inventarios y permite agregar la mejor opción a un carrito con
-descuentos. Un administrador carga y edita los precios.
+Backend REST para comparar productos entre inventarios MongoDB aislados por
+almacén. El proyecto expone únicamente una API HTTP; no incluye interfaz
+Tkinter ni modo consola.
 
-El proyecto también incluye un backend REST preparado para que una interfaz
-externa (React, Angular, Astro u otra) consuma el negocio sin duplicar la
-lógica. En esta fase no se incluye una interfaz web.
+## Arquitectura
 
-El proyecto es un ejercicio académico de **patrones de diseño** y **estructuras
-de datos implementadas a mano** (sin usar `list` para los inventarios ni para la
-lista de compras).
+El backend está organizado como MVC modular:
 
-## Requisitos
+- `views/api/`: presentación HTTP, DTOs, sesiones, errores y rutas.
+- `controllers/`: coordinación de casos de uso de la aplicación.
+- `models/`: entidades, estrategias de búsqueda/descuento e interfaces de
+  persistencia.
+- `permisos.py`: roles, permisos y logging.
 
-- Python 3.10 o superior
-- Tkinter (incluido en la mayoría de instalaciones de Python)
-- MongoDB para ejecutar la API real (ver `docker-compose.yml`).
-- Dependencias Python de `requirements.txt`.
+La API es la única superficie de presentación. El dominio no depende de
+FastAPI y la persistencia no devuelve documentos Mongo directamente.
 
-En Debian/Ubuntu, si falta Tkinter: `sudo apt install python3-tk`
+## MongoDB
 
-## Cómo ejecutar
+Cada almacén se mantiene en una base independiente:
 
-```bash
-# Interfaz gráfica (por defecto)
-python3 main.py
+- `warehouse_1.productos`
+- `warehouse_2.productos`
+- `warehouse_3.productos`
 
-# Menú de consola: carrito, descuentos, lista de compras y administración
-python3 main.py --consola
+La aplicación consulta esas bases directamente. No existe una colección
+`comparador` ni un listener de Change Streams obligatorio: no se mantiene una
+segunda fuente de verdad para inventarios y precios.
 
-# Omitir la impresión de la matriz de permisos al arrancar
-python3 main.py --sin-banner
-```
-
-## Backend REST
-
-La API es la **Vista HTTP** del MVC. `controlador/controlador.py` sigue siendo
-el único controlador y los módulos de `modelo/` contienen las reglas del
-negocio. MongoDB es obligatorio para iniciar el servidor; no existe un
-fallback silencioso a memoria.
+Para desarrollo local:
 
 ```bash
-pip install -r requirements.txt
 docker compose up -d
-MONGODB_URI=mongodb://localhost:27017 \
-  .venv/bin/uvicorn vista.api.app:create_app --factory --reload
-```
-
-La documentación interactiva queda disponible en
-`http://localhost:8000/docs` y el contrato para el frontend está en
-[`openapi.yaml`](openapi.yaml). La API usa sesiones temporales: el frontend
-debe conservar `session_id` y enviarlo en las rutas posteriores. Configura
-orígenes permitidos con `CORS_ORIGINS` separados por coma.
-
-Rutas principales:
-
-- `GET /api/health`: comprueba API y MongoDB.
-- `POST /api/sessions/user` y `POST /api/sessions/admin`: crean sesiones.
-- `POST/DELETE /api/sessions/{token}/shopping-list`: gestiona la lista.
-- `POST /api/sessions/{token}/search`: modos `mejor_precio`, `catalogo` o
-  `global`.
-- `GET/DELETE /api/sessions/{token}/cart` y rutas de ítems/descuentos.
-- Rutas `/admin/...` para alta, actualización de precios e importación CSV.
-
-La clave administrativa predeterminada es `admin123` y puede cambiarse con
-`ADMIN_CLAVE`.
-
-## Persistencia MongoDB
-
-Por defecto la aplicación sigue usando memoria, lo que permite ejecutar las
-pruebas sin MongoDB. Para usar inventarios persistentes, instala la dependencia
-y define `MONGODB_URI`:
-
-```bash
 pip install -r requirements.txt
-MONGODB_URI=mongodb://localhost:27017 python3 main.py
+export MONGODB_URI=mongodb://127.0.0.1:27017/
+.venv/bin/uvicorn views.api.app:create_app --factory --reload
 ```
 
-La URI debe apuntar a un replica set o clúster, ya que el listener de
-sincronización usa Change Streams. La aplicación escribe solamente en
-`almacen_1.productos`, `almacen_2.productos` o `almacen_3.productos`.
-Ejecuta el listener en otro proceso:
+La documentación interactiva queda en `http://localhost:8000/docs`.
+
+## API
+
+La versión recomendada está bajo `/api/v1`. Las rutas `/api` se conservan
+temporalmente para compatibilidad:
+
+- `GET /api/v1/health`
+- `POST /api/v1/sessions/user`
+- `POST /api/v1/sessions/admin`
+- `GET/DELETE /api/v1/sessions/{token}`
+- `POST/DELETE /api/v1/sessions/{token}/shopping-list`
+- `POST /api/v1/sessions/{token}/search`
+- `GET/DELETE /api/v1/sessions/{token}/cart`
+- `POST/DELETE /api/v1/sessions/{token}/cart/items`
+- `POST /api/v1/sessions/{token}/cart/discount`
+- Rutas administrativas para inventario y CSV.
+
+El contrato completo se encuentra en [`openapi.yaml`](openapi.yaml).
+
+## Funcionalidades
+
+- Sesiones de cliente y administrador con permisos.
+- Lista de compras sin duplicados.
+- Búsqueda por mejor precio por almacén, catálogo completo y mejor precio
+  global.
+- Productos normales, físicos, digitales y por suscripción.
+- Carrito y descuentos porcentuales o fijos.
+- Alta, actualización e importación CSV de inventarios.
+- Exportación de lista y carrito desde los casos de uso existentes.
+
+## Desarrollo y pruebas
 
 ```bash
-MONGODB_URI=mongodb://localhost:27017 python3 run_listener.py
+.venv/bin/python -m unittest pruebas.py pruebas_api.py
 ```
 
-El listener usa un `MongoClient.watch()` global y replica hacia
-`comparador.productos` con consistencia eventual. Al iniciar la aplicación, los
-inventarios visibles se cargan directamente desde las bases dedicadas
-`almacen_X`, que son la fuente de verdad; por ello pueden mostrarse aunque el
-listener esté detenido. Cada documento requiere un
-`producto_id` estable y se replica con `_id` compuesto
-`{almacen_id}_{producto_id}`. Guarda el resume token en
-`comparador.sync_state`; si MongoDB devuelve `ChangeStreamHistoryLost` (286),
-realiza una reconciliación completa y reanuda desde un punto de corte anterior
-al escaneo.
+La suite no necesita MongoDB porque usa una persistencia falsa para los casos
+de API. Las pruebas de integración con MongoDB deben ejecutarse contra el
+servicio de Docker.
 
-Para un replica set local de un nodo:
+## Configuración
 
-```bash
-docker run --name compras-mongo -p 27017:27017 -d \
-  mongo:7 --replSet rs0 --bind_ip_all
-docker exec compras-mongo mongosh --eval \
-  'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
-```
+Variables principales:
 
-Credenciales de administrador: **`admin123`**.
-Se puede cambiar con la variable de entorno `ADMIN_CLAVE`:
-
-```bash
-ADMIN_CLAVE=mi_clave python3 main.py
-```
-
-## Flujos principales
-
-### Usuario (rol CLIENTE)
-
-1. `Ingresar como Usuario` → se pide un nombre (se registra si es nuevo).
-2. Se agregan nombres a **Mi lista de compras** (se rechazan duplicados).
-3. Se elige un modo de búsqueda y se pulsa **Buscar**:
-   - *Mejor precio por almacén*: el producto más barato de cada almacén.
-   - *Catálogo completo*: todas las coincidencias por almacén.
-   - *Mejor precio global*: el almacén más barato para cada producto.
-4. Se selecciona un resultado y **Agregar al carrito**.
-5. En **Mi carrito** se aplican descuentos (sin descuento, porcentaje o monto
-   fijo), se quitan ítems y se ve el total en tiempo real (patrón Observer).
-6. **Exportar lista** / **Exportar carrito** generan archivos CSV.
-
-### Administrador (rol ADMIN)
-
-1. `Administrar Almacenes` → clave de acceso.
-2. Alta de productos con nombre, marca, categoría, tipo
-   (`normal`, `fisico`, `digital`, `suscripcion`), precio y un extra
-   (costo de envío o meses de suscripción).
-3. Edición de precio: se selecciona un producto del inventario, se escribe el
-   nuevo precio y se pulsa **Actualizar**.
-4. **Cargar CSV...** importa productos de forma masiva (ver formato abajo).
-
-### Modo consola
-
-`python3 main.py --consola` ofrece el mismo circuito sin Tkinter:
-
-- carrito y descuentos,
-- lista de compras (con rechazo de duplicados),
-- búsqueda de mejores precios y vista de almacenes,
-- opción 9: login de administrador para cargar productos o un CSV.
-
-La vista sigue actuando como observador del carrito, por lo que cada cambio
-imprime la notificación y el total en tiempo real.
-
-## Formato del CSV
-
-Cabecera obligatoria: `almacen,nombre,marca,categoria,tipo,precio,extra`
-
-```csv
-almacen,nombre,marca,categoria,tipo,precio,extra
-1,Leche,LaSerenisima,Lacteos,normal,1200,
-2,Leche,Ilolay,Lacteos,normal,1100,
-1,Curso Python,Udemy,Digital,digital,50,
-1,Netflix,Netflix,Streaming,suscripcion,10,3
-2,Caja,Generica,General,fisico,100,7
-```
-
-- `almacen`: id (1, 2 o 3).
-- `tipo`: si se omite, se asume `normal`.
-- `extra`: costo de envío para `fisico`, meses para `suscripcion`.
-- Las filas inválidas se rechazan y se informan con su número de línea.
-
-El repositorio incluye **`productos_ejemplo.csv`** con 57 productos repartidos
-entre los tres almacenes (19 / 18 / 20). Para cargarlo:
-
-- GUI: `Administrar Almacenes` → clave → **Cargar CSV...**
-- Consola: opción `9` → clave → opción `2` → ruta `productos_ejemplo.csv`
-
-Incluye productos repetidos en varios almacenes con precios distintos (Leche,
-Pan, Arroz, Mouse, Monitor, Netflix, etc.) y ejemplos de los cuatro tipos:
-`normal`, `fisico`, `digital` y `suscripcion`.
-
-## Estructura del proyecto
-
-| Archivo | Responsabilidad |
-|---|---|
-| `main.py` | Bootstrapper de la aplicación de escritorio. |
-| `modelo/` | Modelo MVC: productos, listas, carrito, almacenes, estrategias y MongoDB. |
-| `controlador/controlador.py` | Único controlador: casos de uso, sesiones, permisos y coordinación. |
-| `vista/` | Vistas MVC: Tkinter, consola y API HTTP. |
-| `vista/api/` | Rutas REST, DTOs, sesiones HTTP y errores JSON. |
-| `openapi.yaml` | Contrato consumible por la interfaz externa. |
-| `listener_mongodb.py` | Change Stream global y réplica idempotente a `comparador`. |
-| `permisos.py` | Matriz de permisos por rol y `Logger`. |
-| `pruebas.py` | Pruebas unitarias con `unittest`. |
-| `pruebas_api.py` | Pruebas de integración de la API con persistencia simulada. |
-| `pruebas_gui.py` | Prueba de humo de la interfaz Tkinter. |
-
-## Patrones de diseño
-
-| Patrón | Dónde |
-|---|---|
-| **Factory Method** | `Producto` y subclases creadas por `FabricaProductos.crear_producto()`. |
-| **Observer** | `CarritoCompras` notifica a `InterfazUsuario.actualizar()` en cada cambio. |
-| **Strategy** | Descuentos (`SinDescuento`, `DescuentoPorcentaje`, `DescuentoFijo`) y búsquedas (`BusquedaMejorPrecioStrategy`, `BusquedaCatalogoStrategy`, `MejorPrecioGlobalStrategy`). |
-| **MVC** | Modelo (`modelos`, `listas`, `almacenes`), vista (`interfaz`) y controlador (`controlador`). |
-| **Bootstrapper** | `main.py` compone las dependencias. |
-
-## Roles y permisos
-
-| Permiso | INVITADO | CLIENTE | ADMIN |
-|---|:---:|:---:|:---:|
-| ver_menu | ✓ | ✓ | ✓ |
-| crear_lista / agregar / eliminar / comparar / exportar / aplicar_descuento | | ✓ | ✓ |
-| gestionar_almacenes / editar_precio / cargar_csv / login_admin | | | ✓ |
-
-Cada operación sensible pasa por `logger.tiene_permiso()` y deja un registro en
-consola con el resultado (`CONCEDIDO` / `DENEGADO`).
-
-## Pruebas
-
-```bash
-python3 -m compileall -q .
-python3 pruebas.py
-python3 pruebas_api.py
-python3 pruebas_gui.py        # requiere display; en CI: xvfb-run python3 pruebas_gui.py
-```
-
-`pruebas.py` cubre listas enlazadas, Factory, descuentos, búsquedas, Observer y
-el flujo completo del controlador (permisos, carrito, CSV y exportación).
-
-## Limitaciones
-
-- Sin `MONGODB_URI`, la aplicación de escritorio mantiene su comportamiento en
-  memoria; la API, en cambio, no inicia.
-- Con MongoDB, `comparador` tiene consistencia eventual mientras el listener
-  procesa los cambios.
-- Los usuarios son solo nombres; no hay contraseñas por usuario.
-- La clave de administrador es única y local.
+- `MONGODB_URI`: URI obligatoria para iniciar la API.
+- `ADMIN_CLAVE`: clave administrativa; debe configurarse fuera del código.
+- `CORS_ORIGINS`: orígenes permitidos separados por comas.

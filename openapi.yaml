@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: Asistente de Compras API
-  version: 1.0.0
-  description: API REST del backend MVC. MongoDB es obligatorio en ejecución real.
+  version: 2.0.0
+  description: API REST del backend MVC multi-almacén. MongoDB es obligatorio en ejecución real.
 servers:
-  - url: http://localhost:8000/api
+  - url: http://localhost:8000/api/v1
 paths:
   /health:
     get:
