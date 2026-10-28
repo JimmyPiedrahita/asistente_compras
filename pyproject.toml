@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asistente-compras"
-version = "2.0.0"
-description = "API REST multi-almacén para comparación de compras"
+version = "3.0.0"
+description = "API REST MVC multi-almacén para comparación de compras con MongoDB"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "pymongo>=4.6,<5",
@@ -14,9 +15,50 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [
+dev = [
   "httpx2>=2.16,<3",
+  "pytest>=8,<9",
+  "ruff>=0.8,<1",
+  "PyYAML>=6,<7",
 ]
 
 [tool.setuptools]
-packages = ["controllers", "models", "views", "views.api"]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = [
+  "controllers*",
+  "core*",
+  "infrastructure*",
+  "models*",
+  "views*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+  ".venv",
+  "build",
+  "dist",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "UP",
+  "B",
+  "SIM",
+  "RUF",
+]
+# FastAPI usa Depends(...) como valor por defecto; es el patrón oficial.
+ignore = ["B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

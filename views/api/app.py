@@ -1,55 +1,139 @@
-import os
+"""Fábrica de la aplicación FastAPI (capa Vista)."""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
-from models.almacenes import Almacen, GestorAlmacenes
-from models.persistencia_mongodb import MongoInventarioRepository
+from controllers.sesiones import RegistroSesiones
+from core.config import Settings
+from core.logging import configurar_logging, obtener_logger
+from infrastructure.mongodb import MongoInventarioRepository
+from models.almacenes import GestorAlmacenes
 
-from .errores import ApiError
-from .rutas import crear_router
-from .sesiones import RegistroSesiones
+from .errors import registrar_manejadores
+from .routers import ROUTERS
+
+logger = obtener_logger("asistente_compras.api")
+
+RepositoryFactory = Callable[[Settings], object]
+
+
+def _crear_repositorio(settings: Settings, repository_factory: RepositoryFactory | None):
+    if repository_factory is not None:
+        return repository_factory(settings)
+    return MongoInventarioRepository(
+        settings.mongodb_uri,
+        settings.almacenes,
+        timeout_ms=settings.mongodb_timeout_ms,
+    )
 
 
 def create_app(
+    settings: Settings | str | None = None,
+    repository_factory: RepositoryFactory | None = None,
+    *,
     mongo_uri: str | None = None,
-    repository_factory=MongoInventarioRepository,
 ) -> FastAPI:
-    """Crea la API. MongoDB es obligatorio para la ejecución real."""
-    uri = mongo_uri or os.getenv("MONGODB_URI")
-    if not uri:
-        raise RuntimeError("MONGODB_URI es obligatorio para iniciar la API")
-    persistencia = repository_factory(uri)
-    gestor = GestorAlmacenes(persistencia)
-    for id_almacen in range(1, 4):
-        gestor.agregar_almacen(
-            Almacen(id_almacen=id_almacen, nombre=f"Almacen {id_almacen}")
+    """Crea la API. MongoDB es obligatorio en ejecución real.
+
+    ``create_app("mongodb://...")`` se mantiene por compatibilidad con la
+    versión anterior; lo recomendable es pasar un ``Settings``.
+    """
+    if isinstance(settings, str):
+        mongo_uri = settings
+        settings = None
+    if settings is None:
+        settings = Settings.from_env(mongo_uri=mongo_uri)
+
+    configurar_logging(settings.log_level)
+    repositorio = _crear_repositorio(settings, repository_factory)
+    gestor = GestorAlmacenes(repositorio, settings.almacenes)
+    gestor.cargar_inventarios()
+    sesiones = RegistroSesiones(
+        gestor,
+        admin_clave=settings.admin_clave,
+        ttl_seconds=settings.session_ttl_seconds,
+        max_sesiones=settings.max_sessions,
+        max_csv_bytes=settings.max_csv_bytes,
+    )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        logger.info(
+            "API iniciada con %s almacenes y MongoDB en %s",
+            len(settings.almacenes),
+            settings.mongodb_db_prefix,
         )
-    sesiones = RegistroSesiones(gestor)
+        try:
+            yield
+        finally:
+            try:
+                repositorio.close()  # type: ignore[attr-defined]
+            except Exception:  # pragma: no cover - cierre defensivo
+                logger.exception("No se pudo cerrar la conexión con MongoDB")
 
     app = FastAPI(
         title="Asistente de Compras API",
-        version="2.0.0",
-        description="API REST del asistente de compras multi-almacén.",
+        version="3.0.0",
+        description=(
+            "API REST MVC del asistente de compras multi-almacén. "
+            "Cada almacén usa una base de datos MongoDB independiente."
+        ),
+        lifespan=lifespan,
+        openapi_tags=[
+            {"name": "Salud", "description": "Disponibilidad de la API y MongoDB."},
+            {"name": "Almacenes", "description": "Almacenes e inventarios."},
+            {"name": "Sesiones", "description": "Sesiones de cliente y administrador."},
+            {"name": "Lista de compras", "description": "Lista personal del cliente."},
+            {"name": "Búsqueda", "description": "Comparación entre almacenes."},
+            {"name": "Carrito", "description": "Carrito y descuentos."},
+            {"name": "Administración", "description": "Alta, precios y CSV."},
+            {"name": "Exportación", "description": "Descarga de listas y carrito en CSV."},
+        ],
     )
-    origenes = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    app.state.repositorio = repositorio
+    app.state.gestor = gestor
+    app.state.sesiones = sesiones
+
+    origenes = list(settings.cors_origins)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[origen.strip() for origen in origenes if origen.strip()],
-        allow_credentials=True,
+        allow_origins=origenes,
+        allow_credentials="*" not in origenes,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
     )
 
-    @app.exception_handler(ApiError)
-    async def manejar_error(request: Request, error: ApiError):
-        return JSONResponse(
-            status_code=error.status_code,
-            content={"error": error.detail},
-        )
+    @app.middleware("http")
+    async def asignar_request_id(request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 
-    router = crear_router(sesiones, persistencia)
-    app.include_router(router, prefix="/api", include_in_schema=False)
-    app.include_router(router, prefix="/api/v1", include_in_schema=True)
+    registrar_manejadores(app)
+
+    for router in ROUTERS:
+        app.include_router(router, prefix="/api/v1")
+        app.include_router(router, prefix="/api", include_in_schema=False)
+
+    @app.get("/", include_in_schema=False)
+    def raiz() -> dict[str, str]:
+        return {
+            "name": "Asistente de Compras API",
+            "version": app.version,
+            "docs": "/docs",
+            "api": "/api/v1",
+        }
+
     return app
+
+
+__all__ = ["create_app"]
