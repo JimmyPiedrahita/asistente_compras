@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: Asistente de Compras API
+  version: 1.0.0
+  description: API REST del backend MVC. MongoDB es obligatorio en ejecución real.
+servers:
+  - url: http://localhost:8000/api
+paths:
+  /health:
+    get:
+      summary: Comprueba API y MongoDB
+      responses:
+        "200":
+          description: Servicio disponible
+  /sessions/user:
+    post:
+      summary: Inicia sesión de cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: {type: string, minLength: 1}
+      responses:
+        "201": {description: Sesión creada}
+  /sessions/admin:
+    post:
+      summary: Inicia sesión de administrador
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clave]
+              properties:
+                clave: {type: string}
+      responses:
+        "201": {description: Sesión creada}
+        "401": {description: Clave inválida}
+  /sessions/{token}:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+    get:
+      summary: Obtiene el estado de la sesión
+      responses:
+        "200": {description: Estado, lista y carrito}
+        "401": {description: Sesión inválida}
+    delete:
+      summary: Cierra la sesión
+      responses:
+        "204": {description: Sesión cerrada}
+  /sessions/{token}/shopping-list:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+    post:
+      summary: Agrega un producto a la lista
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              properties:
+                nombre: {type: string}
+      responses:
+        "200": {description: Lista actualizada}
+    delete:
+      summary: Elimina un producto de la lista
+      parameters:
+        - in: path
+          name: nombre
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Lista actualizada}
+  /sessions/{token}/search:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+    post:
+      summary: Ejecuta una búsqueda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                modo:
+                  type: string
+                  enum: [mejor_precio, catalogo, global]
+                  default: mejor_precio
+      responses:
+        "200": {description: Resultados serializados}
+  /sessions/{token}/cart:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+    get:
+      summary: Obtiene el carrito
+      responses:
+        "200": {description: Resumen del carrito}
+    delete:
+      summary: Vacía el carrito
+      responses:
+        "200": {description: Carrito actualizado}
+  /sessions/{token}/cart/items:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+    post:
+      summary: Agrega un producto por identificador estable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [almacen_id, producto_id]
+              properties:
+                almacen_id: {type: integer}
+                producto_id: {type: string}
+      responses:
+        "200": {description: Carrito actualizado}
+  /sessions/{token}/cart/items/{indice}:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+      - in: path
+        name: indice
+        required: true
+        schema: {type: integer}
+    delete:
+      summary: Quita un ítem del carrito
+      responses:
+        "200": {description: Carrito actualizado}
+  /sessions/{token}/cart/discount:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+    post:
+      summary: Aplica descuento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo]
+              properties:
+                tipo: {type: string, enum: [sin, porcentaje, fijo]}
+                valor: {type: number, minimum: 0}
+      responses:
+        "200": {description: Carrito actualizado}
+  /sessions/{token}/admin/warehouses/{almacen_id}/products:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+      - in: path
+        name: almacen_id
+        required: true
+        schema: {type: integer}
+    post:
+      summary: Crea un producto (ADMIN)
+      responses:
+        "200": {description: Producto creado}
+    patch:
+      summary: Actualiza precio por producto_id (ADMIN)
+      responses:
+        "200": {description: Precio actualizado}
+  /sessions/{token}/admin/csv:
+    parameters:
+      - {$ref: "#/components/parameters/Token"}
+    post:
+      summary: Importa CSV (ADMIN)
+      responses:
+        "200": {description: Resultado de importación}
+components:
+  parameters:
+    Token:
+      in: path
+      name: token
+      required: true
+      schema: {type: string}

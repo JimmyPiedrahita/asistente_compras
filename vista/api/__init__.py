@@ -1,0 +1,2 @@
+"""Vista HTTP del sistema."""
+

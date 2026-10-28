@@ -1,0 +1,32 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb_local
+    ports:
+      - "27017:27017"
+    entrypoint: [ "/usr/bin/mongod", "--bind_ip_all", "--replSet", "rs0" ]
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand({ping: 1}).ok\" localhost:27017/test | grep 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mongodb-init:
+    image: mongo:7.0
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mongosh --quiet mongodb://mongodb:27017/admin
+        --eval 'try { rs.status() } catch (e) {
+        rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27017"}]});
+        }'
+    restart: "no"
+
+volumes:
+  mongo_data:
