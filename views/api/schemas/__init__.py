@@ -3,6 +3,7 @@
 from .base import ErrorRespuesta, ModeloBase
 from .productos import (
     AlmacenRespuesta,
+    ComparadorEstadoRespuesta,
     CsvSolicitud,
     ImportacionCsvRespuesta,
     OkRespuesta,
@@ -35,6 +36,7 @@ __all__ = [
     "BusquedaSolicitud",
     "CarritoProductoSolicitud",
     "ClaveAdministrador",
+    "ComparadorEstadoRespuesta",
     "CsvSolicitud",
     "DescuentoSolicitud",
     "ErrorRespuesta",

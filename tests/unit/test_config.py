@@ -20,6 +20,7 @@ class PruebasConfiguracion(unittest.TestCase):
         self.assertEqual(settings.admin_clave, "clave-segura")
         self.assertEqual(len(settings.almacenes), 3)
         self.assertEqual(settings.almacenes[0].base_datos, "warehouse_1")
+        self.assertEqual(settings.mongodb_comparador_db, "comparador")
 
     def test_prefijo_y_almacenes_personalizados(self) -> None:
         settings = Settings.from_env(
@@ -56,6 +57,34 @@ class PruebasConfiguracion(unittest.TestCase):
         almacenes = crear_almacenes("x")
         self.assertEqual([a.id for a in almacenes], [1, 2, 3])
         self.assertEqual(almacenes[2].base_datos, "x_3")
+
+    def test_base_comparador(self) -> None:
+        settings = Settings.from_env(
+            {
+                "MONGODB_URI": "mongodb://localhost:27017",
+                "ADMIN_CLAVE": "clave-segura",
+                "MONGODB_COMPARADOR_DB": "integrada",
+            }
+        )
+        self.assertEqual(settings.mongodb_comparador_db, "integrada")
+
+        with self.assertRaises(ConfiguracionInvalida):
+            Settings.from_env(
+                {
+                    "MONGODB_URI": "mongodb://localhost:27017",
+                    "ADMIN_CLAVE": "clave-segura",
+                    "MONGODB_COMPARADOR_DB": "nombre.invalido",
+                }
+            )
+        with self.assertRaises(ConfiguracionInvalida):
+            Settings.from_env(
+                {
+                    "MONGODB_URI": "mongodb://localhost:27017",
+                    "ADMIN_CLAVE": "clave-segura",
+                    "MONGODB_DB_PREFIX": "tienda",
+                    "MONGODB_COMPARADOR_DB": "tienda_1",
+                }
+            )
 
     def test_prefijo_deriva_almacenes_en_construccion_directa(self) -> None:
         settings = Settings(

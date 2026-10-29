@@ -49,6 +49,8 @@ class SesionCreada(ModeloBase):
 
 class BusquedaSolicitud(ModeloBase):
     modo: ModoBusqueda = "mejor_precio"
+    limit: int = Field(default=100, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
 
     @field_validator("modo", mode="before")
     @classmethod

@@ -174,6 +174,17 @@ class ControladorCompras:
     def listar_productos(self, id_almacen: int) -> list[Any]:
         return self.inventario.listar_productos(id_almacen)
 
+    def listar_productos_paginados(
+        self, id_almacen: int, limit: int = 100, offset: int = 0
+    ) -> tuple[list[Any], int]:
+        return self.inventario.listar_productos_paginados(id_almacen, limit, offset)
+
+    def eliminar_producto_almacen(self, id_almacen: int, producto_id: str):
+        return self.inventario.eliminar_producto(id_almacen, producto_id)
+
+    def estado_comparador(self) -> dict[str, Any]:
+        return self.inventario.estado_comparador()
+
     def recargar_inventarios(self):
         return self.inventario.recargar_inventarios()
 

@@ -7,7 +7,6 @@ import io
 from typing import Any
 
 from core.errors import NoPermitido
-from models.estrategias import MejorPrecioGlobalStrategy
 from models.permisos import EXPORTAR
 
 from .carrito import ControladorCarrito
@@ -18,7 +17,6 @@ class ControladorExportacion:
     def __init__(self, contexto: ContextoSesion, carrito: ControladorCarrito) -> None:
         self.contexto = contexto
         self.carrito = carrito
-        self.comparador = MejorPrecioGlobalStrategy()
 
     def _verificar_permiso(self) -> None:
         if not self.contexto.autorizar(EXPORTAR):
@@ -26,9 +24,8 @@ class ControladorExportacion:
 
     def _filas_lista(self) -> list[dict[str, Any]]:
         with self.contexto.gestor_almacenes.candado:
-            return self.comparador.buscar(
-                self.contexto.lista_compras,
-                self.contexto.gestor_almacenes,
+            return self.contexto.gestor_almacenes.buscar_global(
+                list(self.contexto.lista_compras.mostrar())
             )
 
     def exportar_lista_csv(self) -> tuple[str, int]:

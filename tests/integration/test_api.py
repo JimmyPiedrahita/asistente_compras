@@ -9,30 +9,178 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from core.config import Settings
-from core.errors import NoEncontrado
+from core.errors import Conflicto, NoEncontrado
+from models.almacenes import Almacen
+from models.listas import ListaSimple
 from models.productos import Producto
+from models.texto import normalizar_texto
 from views.api.app import create_app
 
 
 class PersistenciaFalsa:
-    """Repositorio en memoria que imita el contrato de MongoDB."""
+    """Repositorio en memoria que imita el contrato de MongoDB.
+
+    Las escrituras actualizan ``datos`` y ``comparador`` de forma síncrona para
+    simular lo que el listener hace con Change Streams.
+    """
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.datos: dict[int, list[Producto]] = {almacen.id: [] for almacen in settings.almacenes}
+        self.comparador: dict[tuple[int, str], Producto] = {}
+        self._modelos = {
+            almacen.id: Almacen(almacen.id, almacen.nombre) for almacen in settings.almacenes
+        }
+        self.reconciliaciones = 0
+
+    def _proyectar(self, id_almacen: int, producto: Producto) -> None:
+        self.comparador[(int(id_almacen), producto.producto_id)] = producto.clonar()
+
+    def _desproyectar(self, id_almacen: int, producto_id: str) -> None:
+        self.comparador.pop((int(id_almacen), str(producto_id)), None)
 
     def cargar_almacen(self, id_almacen: int) -> list[Producto]:
         return [producto.clonar() for producto in self.datos.get(id_almacen, [])]
 
+    def listar_productos(
+        self, id_almacen: int, limit: int = 100, offset: int = 0
+    ) -> tuple[list[Producto], int]:
+        productos = self.datos.get(id_almacen, [])
+        return (
+            [producto.clonar() for producto in productos[offset : offset + limit]],
+            len(productos),
+        )
+
+    def producto_en_indice(self, id_almacen: int, indice: int) -> Producto | None:
+        try:
+            return self.datos.get(id_almacen, [])[indice].clonar()
+        except IndexError:
+            return None
+
+    def obtener_producto(self, id_almacen: int, producto_id: str) -> Producto | None:
+        for producto in self.datos.get(id_almacen, []):
+            if producto.producto_id == str(producto_id):
+                return producto.clonar()
+        return None
+
+    def existe_nombre_marca(self, id_almacen: int, nombre: str, marca: str | None = None) -> bool:
+        for producto in self.datos.get(id_almacen, []):
+            if normalizar_texto(producto.nombre) != normalizar_texto(nombre):
+                continue
+            if marca is None or normalizar_texto(producto.marca) == normalizar_texto(marca):
+                return True
+        return False
+
+    def contar(self, id_almacen: int) -> int:
+        return len(self.datos.get(id_almacen, []))
+
     def insertar(self, id_almacen: int, producto: Producto) -> None:
+        if any(
+            actual.producto_id == producto.producto_id for actual in self.datos.get(id_almacen, [])
+        ):
+            raise Conflicto(f"El producto {producto.producto_id} ya existe")
         self.datos.setdefault(id_almacen, []).append(producto.clonar())
+        self._proyectar(id_almacen, producto)
 
     def actualizar(self, id_almacen: int, producto: Producto) -> None:
         for indice, actual in enumerate(self.datos.get(id_almacen, [])):
             if actual.producto_id == producto.producto_id:
                 self.datos[id_almacen][indice] = producto.clonar()
+                self._proyectar(id_almacen, producto)
                 return
         raise NoEncontrado(f"Producto no encontrado: {producto.producto_id}")
+
+    def eliminar(self, id_almacen: int, producto_id: str) -> None:
+        productos = self.datos.get(id_almacen, [])
+        for indice, actual in enumerate(productos):
+            if actual.producto_id == str(producto_id):
+                productos.pop(indice)
+                self._desproyectar(id_almacen, producto_id)
+                return
+        raise NoEncontrado(f"Producto no encontrado: {producto_id}")
+
+    def buscar_mejor_precio(self, nombres) -> dict[Almacen, ListaSimple]:
+        buscados = {normalizar_texto(nombre) for nombre in nombres}
+        mejores: dict[tuple[int, str], Producto] = {}
+        for (id_almacen, _), producto in self.comparador.items():
+            nombre = normalizar_texto(producto.nombre)
+            if nombre not in buscados:
+                continue
+            clave = (id_almacen, nombre)
+            actual = mejores.get(clave)
+            if actual is None or producto.obtener_precio_final() < actual.obtener_precio_final():
+                mejores[clave] = producto
+
+        resultado: dict[Almacen, ListaSimple] = {}
+        for (id_almacen, _), producto in sorted(mejores.items()):
+            resultado.setdefault(self._modelos[id_almacen], ListaSimple()).agregar(
+                producto.clonar()
+            )
+        return resultado
+
+    def buscar_catalogo(self, nombres, limit: int = 100, offset: int = 0) -> dict:
+        buscados = {normalizar_texto(nombre) for nombre in nombres}
+        encontrados = [
+            (id_almacen, producto)
+            for (id_almacen, _), producto in self.comparador.items()
+            if normalizar_texto(producto.nombre) in buscados
+        ]
+        encontrados.sort(
+            key=lambda item: (
+                item[0],
+                normalizar_texto(item[1].nombre),
+                item[1].obtener_precio_final(),
+                item[1].producto_id,
+            )
+        )
+        resultado: dict[Almacen, ListaSimple] = {}
+        for id_almacen, producto in encontrados[offset : offset + limit]:
+            resultado.setdefault(self._modelos[id_almacen], ListaSimple()).agregar(
+                producto.clonar()
+            )
+        return resultado
+
+    def buscar_global(self, nombres) -> list[dict]:
+        resultado = []
+        for nombre in nombres:
+            buscado = normalizar_texto(nombre)
+            candidatos = [
+                (id_almacen, producto)
+                for (id_almacen, _), producto in self.comparador.items()
+                if normalizar_texto(producto.nombre) == buscado
+            ]
+            if not candidatos:
+                continue
+            id_almacen, producto = min(candidatos, key=lambda item: item[1].obtener_precio_final())
+            resultado.append(
+                {
+                    "nombre": producto.nombre,
+                    "producto": producto.clonar(),
+                    "almacen": self._modelos[id_almacen],
+                    "precio": producto.obtener_precio_final(),
+                }
+            )
+        return resultado
+
+    def estado_comparador(self) -> dict:
+        return {
+            "estado": "sincronizado",
+            "documentos": len(self.comparador),
+            "ultima_sincronizacion": None,
+            "ultimo_evento": "prueba",
+            "tiene_resume_token": True,
+        }
+
+    def reconciliar_comparador(self) -> dict:
+        self.comparador.clear()
+        for id_almacen, productos in self.datos.items():
+            for producto in productos:
+                self._proyectar(id_almacen, producto)
+        self.reconciliaciones += 1
+        return {
+            "documentos": len(self.comparador),
+            "reconciliados": len(self.comparador),
+        }
 
     def ping(self) -> None:
         return None
@@ -345,6 +493,83 @@ class PruebasApi(unittest.TestCase):
         )
         self.assertEqual(sin_descuento.status_code, 200, sin_descuento.text)
         self.assertEqual(sin_descuento.json()["descuento"], "Sin descuento")
+
+    def test_busqueda_global_devuelve_solo_el_mas_barato(self) -> None:
+        admin = self._sesion_admin()
+        self._agregar_producto(admin, almacen=1, precio=1200, marca="Sancor")
+        self._agregar_producto(admin, almacen=2, precio=1000, marca="Ilolay")
+        self._agregar_producto(admin, almacen=3, precio=1500, marca="LaSerenisima")
+
+        usuario = self._sesion_usuario()
+        self.cliente.post(f"/api/sessions/{usuario}/shopping-list", json={"nombre": "Leche"})
+
+        globales = self.cliente.post(f"/api/sessions/{usuario}/search", json={"modo": "global"})
+        self.assertEqual(globales.status_code, 200, globales.text)
+        resultados = globales.json()["resultados"]
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0]["almacen_id"], 2)
+        self.assertEqual(resultados[0]["producto"]["precio"], 1000)
+
+        catalogo = self.cliente.post(f"/api/sessions/{usuario}/search", json={"modo": "catalogo"})
+        self.assertEqual(catalogo.status_code, 200, catalogo.text)
+        self.assertEqual(len(catalogo.json()["resultados"]), 3)
+
+    def test_paginacion_de_productos(self) -> None:
+        admin = self._sesion_admin()
+        for nombre in ("Arroz", "Cafe", "Aceite"):
+            self._agregar_producto(admin, nombre=nombre, precio=100)
+
+        primera = self.cliente.get("/api/v1/warehouses/1/products?limit=1&offset=0")
+        self.assertEqual(primera.status_code, 200, primera.text)
+        self.assertEqual(len(primera.json()), 1)
+        self.assertEqual(primera.headers["X-Total-Count"], "3")
+
+        segunda = self.cliente.get("/api/v1/warehouses/1/products?limit=1&offset=1")
+        self.assertEqual(segunda.status_code, 200, segunda.text)
+        self.assertEqual(len(segunda.json()), 1)
+        self.assertNotEqual(primera.json()[0]["producto_id"], segunda.json()[0]["producto_id"])
+
+        fuera = self.cliente.get("/api/v1/warehouses/1/products?limit=1&offset=99")
+        self.assertEqual(fuera.status_code, 200)
+        self.assertEqual(fuera.json(), [])
+
+    def test_eliminar_producto_y_comparador(self) -> None:
+        admin = self._sesion_admin()
+        self._agregar_producto(admin, almacen=1, nombre="Arroz", precio=900)
+        producto = self._producto(1)
+
+        usuario = self._sesion_usuario()
+        self.cliente.post(f"/api/sessions/{usuario}/shopping-list", json={"nombre": "Arroz"})
+        antes = self.cliente.post(f"/api/sessions/{usuario}/search", json={"modo": "global"})
+        self.assertEqual(len(antes.json()["resultados"]), 1)
+
+        borrado = self.cliente.delete(
+            f"/api/sessions/{admin}/admin/warehouses/1/products/{producto['producto_id']}"
+        )
+        self.assertEqual(borrado.status_code, 200, borrado.text)
+        self.assertEqual(self.cliente.get("/api/v1/warehouses/1/products").json(), [])
+
+        despues = self.cliente.post(f"/api/sessions/{usuario}/search", json={"modo": "global"})
+        self.assertEqual(despues.json()["resultados"], [])
+
+        repetido = self.cliente.delete(
+            f"/api/sessions/{admin}/admin/warehouses/1/products/{producto['producto_id']}"
+        )
+        self.assertEqual(repetido.status_code, 404)
+
+    def test_estado_y_reconciliacion_de_comparador(self) -> None:
+        admin = self._sesion_admin()
+        self._agregar_producto(admin, almacen=1)
+        estado = self.cliente.get(f"/api/sessions/{admin}/admin/comparador/status")
+        self.assertEqual(estado.status_code, 200, estado.text)
+        self.assertEqual(estado.json()["documentos"], 1)
+
+        reconciliacion = self.cliente.post(f"/api/sessions/{admin}/admin/comparador/reconciliar")
+        self.assertEqual(reconciliacion.status_code, 200, reconciliacion.text)
+
+        usuario = self._sesion_usuario()
+        denegado = self.cliente.get(f"/api/sessions/{usuario}/admin/comparador/status")
+        self.assertEqual(denegado.status_code, 403)
 
     def test_openapi(self) -> None:
         esquema = self.cliente.get("/openapi.json")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 
@@ -62,16 +63,30 @@ def estado_sesion_json(controlador: Any) -> dict[str, Any]:
     }
 
 
-def almacen_json(almacen: Any) -> dict[str, Any]:
+def almacen_json(almacen: Any, products: int | None = None) -> dict[str, Any]:
     return {
         "id": almacen.id_almacen,
         "name": almacen.nombre,
-        "products": len(almacen.inventario),
+        "products": len(almacen.inventario) if products is None else int(products),
+    }
+
+
+def comparador_estado_json(estado: dict[str, Any]) -> dict[str, Any]:
+    ultima = estado.get("ultima_sincronizacion")
+    if isinstance(ultima, datetime):
+        ultima = ultima.isoformat()
+    return {
+        "estado": str(estado.get("estado", "desconocido")),
+        "documentos": int(estado.get("documentos", 0)),
+        "ultima_sincronizacion": ultima,
+        "ultimo_evento": estado.get("ultimo_evento"),
+        "tiene_resume_token": bool(estado.get("tiene_resume_token", False)),
     }
 
 
 __all__ = [
     "almacen_json",
+    "comparador_estado_json",
     "estado_sesion_json",
     "producto_json",
     "resultado_busqueda_json",

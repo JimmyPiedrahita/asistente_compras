@@ -29,6 +29,7 @@ def _crear_repositorio(settings: Settings, repository_factory: RepositoryFactory
     return MongoInventarioRepository(
         settings.mongodb_uri,
         settings.almacenes,
+        comparador_db=settings.mongodb_comparador_db,
         timeout_ms=settings.mongodb_timeout_ms,
     )
 
@@ -53,7 +54,6 @@ def create_app(
     configurar_logging(settings.log_level)
     repositorio = _crear_repositorio(settings, repository_factory)
     gestor = GestorAlmacenes(repositorio, settings.almacenes)
-    gestor.cargar_inventarios()
     sesiones = RegistroSesiones(
         gestor,
         admin_clave=settings.admin_clave,
@@ -79,10 +79,11 @@ def create_app(
 
     app = FastAPI(
         title="Asistente de Compras API",
-        version="3.0.0",
+        version="3.1.0",
         description=(
             "API REST MVC del asistente de compras multi-almacén. "
-            "Cada almacén usa una base de datos MongoDB independiente."
+            "Cada almacén usa una base MongoDB independiente y la base "
+            "``comparador`` integra los productos mediante Change Streams."
         ),
         lifespan=lifespan,
         openapi_tags=[

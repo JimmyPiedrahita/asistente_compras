@@ -8,18 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/
+      MONGODB_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
       ADMIN_CLAVE: test-admin-key
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +22,37 @@ jobs:
             requirements.txt
             requirements-dev.txt
             pyproject.toml
+
+      - name: Iniciar MongoDB en replica set
+        run: |
+          docker run -d --name mongodb --network host \
+            mongo:7.0 --replSet rs0 --bind_ip_all
+          listo=0
+          for _ in $(seq 1 60); do
+            if docker exec mongodb mongosh --quiet \
+              --eval 'db.adminCommand({ ping: 1 }).ok' | grep -q 1; then
+              listo=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$listo" -ne 1 ]; then
+            echo "MongoDB no respondió" >&2
+            docker logs mongodb
+            exit 1
+          fi
+          docker exec mongodb mongosh --quiet --eval \
+            'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
+          for _ in $(seq 1 60); do
+            if docker exec mongodb mongosh --quiet \
+              --eval 'db.hello().isWritablePrimary' | grep -q true; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "El replica set no llegó a primario" >&2
+          docker logs mongodb
+          exit 1
 
       - name: Instalar dependencias
         run: |

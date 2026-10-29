@@ -22,6 +22,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=6 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3).read()" || exit 1
 
-# Un único worker: la caché de inventario y las sesiones viven en memoria.
-# Para escalar horizontalmente habría que mover sesiones/caché a un almacén compartido.
+# Un único worker: las sesiones viven en memoria. El catálogo no se cachea;
+# se consulta en MongoDB con índices y paginación.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

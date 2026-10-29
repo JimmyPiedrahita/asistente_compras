@@ -2,8 +2,9 @@ openapi: 3.1.0
 info:
   title: Asistente de Compras API
   description: API REST MVC del asistente de compras multi-almacén. Cada almacén usa
-    una base de datos MongoDB independiente.
-  version: 3.0.0
+    una base MongoDB independiente y la base ``comparador`` integra los productos
+    mediante Change Streams.
+  version: 3.1.0
 servers:
 - url: http://localhost:8000
   description: Servidor local
@@ -76,6 +77,27 @@ paths:
         schema:
           type: integer
           title: Almacen Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          description: Máximo de productos a devolver
+          default: 100
+          title: Limit
+        description: Máximo de productos a devolver
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Productos a omitir
+          default: 0
+          title: Offset
+        description: Productos a omitir
       responses:
         '200':
           description: Successful Response
@@ -663,6 +685,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/admin/warehouses/{almacen_id}/products/{producto_id}:
+    delete:
+      tags:
+      - Administración
+      summary: Eliminar Producto
+      operationId: eliminar_producto_api_v1_sessions__token__admin_warehouses__almacen_id__products__producto_id__delete
+      parameters:
+      - name: almacen_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Almacen Id
+      - name: producto_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Producto Id
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sessions/{token}/admin/csv:
     post:
       tags:
@@ -699,6 +769,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ImportacionCsvRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/admin/comparador/status:
+    get:
+      tags:
+      - Administración
+      summary: Estado Comparador
+      operationId: estado_comparador_api_v1_sessions__token__admin_comparador_status_get
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparadorEstadoRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/admin/comparador/reconciliar:
+    post:
+      tags:
+      - Administración
+      summary: Reconciliar Comparador
+      operationId: reconciliar_comparador_api_v1_sessions__token__admin_comparador_reconciliar_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkRespuesta'
         '422':
           description: Validation Error
           content:
@@ -855,6 +997,17 @@ components:
           - global
           title: Modo
           default: mejor_precio
+        limit:
+          type: integer
+          maximum: 500.0
+          minimum: 1.0
+          title: Limit
+          default: 100
+        offset:
+          type: integer
+          minimum: 0.0
+          title: Offset
+          default: 0
       type: object
       title: BusquedaSolicitud
     CarritoProductoSolicitud:
@@ -882,6 +1035,33 @@ components:
       required:
       - clave
       title: ClaveAdministrador
+    ComparadorEstadoRespuesta:
+      properties:
+        estado:
+          type: string
+          title: Estado
+        documentos:
+          type: integer
+          title: Documentos
+          default: 0
+        ultima_sincronizacion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ultima Sincronizacion
+        ultimo_evento:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ultimo Evento
+        tiene_resume_token:
+          type: boolean
+          title: Tiene Resume Token
+          default: false
+      type: object
+      required:
+      - estado
+      title: ComparadorEstadoRespuesta
     CsvSolicitud:
       properties:
         contenido:

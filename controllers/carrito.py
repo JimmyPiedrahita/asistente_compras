@@ -26,10 +26,9 @@ class ControladorCarrito:
     def agregar_seleccion(self, producto: Any, id_almacen: int) -> Resultado:
         if not self.contexto.autorizar(AGREGAR_PRODUCTO):
             return Resultado.DENEGADO
-        almacen = self.contexto.gestor_almacenes.obtener_almacen(id_almacen)
-        if almacen is None:
-            return Resultado.NO_ENCONTRADO
-        candidato = almacen.producto_por_id(producto.producto_id)
+        candidato = self.contexto.gestor_almacenes.obtener_producto(
+            id_almacen, producto.producto_id
+        )
         if candidato is None:
             self.contexto.registrar(
                 "CLIENTE", "Selección no válida", "El producto ya no está en el almacén"
@@ -41,10 +40,7 @@ class ControladorCarrito:
     def agregar_por_id(self, id_almacen: int, producto_id: str) -> Resultado:
         if not self.contexto.autorizar(AGREGAR_PRODUCTO):
             return Resultado.DENEGADO
-        almacen = self.contexto.gestor_almacenes.obtener_almacen(id_almacen)
-        if almacen is None:
-            return Resultado.NO_ENCONTRADO
-        producto = almacen.producto_por_id(producto_id)
+        producto = self.contexto.gestor_almacenes.obtener_producto(id_almacen, producto_id)
         if producto is None:
             return Resultado.NO_ENCONTRADO
         self.contexto.carrito.agregar_producto(producto.clonar())

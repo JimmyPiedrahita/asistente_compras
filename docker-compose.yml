@@ -4,7 +4,7 @@ services:
     container_name: asistente_compras_mongodb
     ports:
       - "27017:27017"
-    command: ["mongod", "--bind_ip_all"]
+    command: ["mongod", "--bind_ip_all", "--replSet", "rs0"]
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
@@ -18,14 +18,58 @@ services:
       timeout: 5s
       retries: 20
 
+  mongo-init:
+    image: mongo:7.0
+    container_name: asistente_compras_mongo_init
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    entrypoint: ["mongosh", "--host", "mongodb:27017", "--quiet", "--eval"]
+    command:
+      - |
+        const anunciado = "${MONGO_REPLICA_HOST:-mongodb:27017}";
+        try {
+          rs.status();
+          print("Replica set rs0 ya inicializado");
+        } catch (error) {
+          print("Inicializando replica set rs0 con " + anunciado + "...");
+          rs.initiate({
+            _id: "rs0",
+            members: [{ _id: 0, host: anunciado }]
+          });
+        }
+        // Un volumen creado con otro hostname (por ejemplo localhost:27017)
+        // anuncia una dirección inalcanzable para los demás contenedores.
+        let configuracion = rs.conf();
+        const hosts = configuracion.members.map((miembro) => miembro.host);
+        if (hosts.length !== 1 || hosts[0] !== anunciado) {
+          print("Reconfigurando miembros " + JSON.stringify(hosts) + " -> " + anunciado);
+          configuracion.members = [{ _id: 0, host: anunciado }];
+          configuracion.version = (configuracion.version || 1) + 1;
+          rs.reconfig(configuracion, { force: true });
+        }
+        for (let intento = 0; intento < 60; intento++) {
+          try {
+            if (db.hello().isWritablePrimary) {
+              print("Primario listo en " + anunciado);
+              quit(0);
+            }
+          } catch (error) {}
+          sleep(500);
+        }
+        print("El replica set no alcanzó el estado primario");
+        quit(1);
+    restart: "no"
+
   app:
     build:
       context: .
     container_name: asistente_compras_api
     environment:
-      MONGODB_URI: mongodb://mongodb:27017/
+      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0
       ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
       MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
+      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
       WAREHOUSES: ${WAREHOUSES:-}
       MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
@@ -36,8 +80,29 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      mongodb:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  listener:
+    build:
+      context: .
+    container_name: asistente_compras_listener
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0
+      ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
+      MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
+      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
+      WAREHOUSES: ${WAREHOUSES:-}
+      MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: ["python", "scripts/run_listener.py"]
+    # El healthcheck de la imagen apunta al puerto 8000 de la API.
+    healthcheck:
+      disable: true
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   seed:
@@ -45,15 +110,16 @@ services:
       context: .
     profiles: ["tools"]
     environment:
-      MONGODB_URI: mongodb://mongodb:27017/
+      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0
       ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
       MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
+      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
       WAREHOUSES: ${WAREHOUSES:-}
       MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
     command: ["python", "scripts/seed_mongodb.py", "--archivo", "productos_ejemplo.csv"]
     depends_on:
-      mongodb:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
     restart: "no"
 
 volumes:
