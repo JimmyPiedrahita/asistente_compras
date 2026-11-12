@@ -36,6 +36,7 @@ models/estrategias/             Strategy: búsquedas y descuentos
 infrastructure/mongodb/         Cliente, índices, repositorio y proyector comparador
 controllers/                    Casos de uso y fachada ControladorCompras
 views/api/                      FastAPI, DTOs, serializadores, routers y errores
+frontend/                       Interfaz React + Tailwind CSS para toda la API
 tests/unit/                     Dominio, estrategias, controladores y sesiones
 tests/integration/              API con persistencia falsa y MongoDB real
 scripts/                        Seed, listener, reconciliación y OpenAPI
@@ -74,15 +75,20 @@ MongoDB (replica set rs0)
 ├── warehouse_1.productos      fuente de verdad
 ├── warehouse_2.productos      fuente de verdad
 ├── warehouse_3.productos      fuente de verdad
-└── comparador
-    ├── productos              read model integrado
-    └── sync_state             resume token y estado del listener
+├── comparador
+│   ├── productos              read model integrado
+│   └── sync_state             resume token y estado del listener
+└── seguridad
+    ├── roles                  catálogo y permisos por rol
+    └── usuarios               clientes y proveedores activos
 ```
 
 El prefijo de los almacenes es configurable con `MONGODB_DB_PREFIX`. El número
 y los nombres se pueden cambiar con `WAREHOUSES=1:Centro,2:Norte`. La base
 integrada se configura con `MONGODB_COMPARADOR_DB` y no puede coincidir con la
-base de un almacén.
+base de un almacén. Los roles y usuarios viven en `MONGODB_SEGURIDAD_DB`
+(`seguridad` por defecto); al arrancar, la API sincroniza la colección `roles`
+desde la matriz canónica de `models/permisos.py` sin borrar usuarios.
 
 Cada documento de almacén guarda `_id = producto_id`, los datos del producto y
 campos normalizados (`nombre_normalizado`, `marca_normalizada`) con índices.
@@ -210,6 +216,56 @@ También se puede ejecutar directamente:
 python main.py
 ```
 
+## Interfaz web (React + Tailwind CSS)
+
+La carpeta [`frontend/`](frontend/) contiene una SPA que consume **todos los
+endpoints** de la API: salud, almacenes, sesiones, lista de compras, búsqueda,
+carrito, administración y exportaciones CSV.
+
+Requisitos: Node.js 20 o superior.
+
+```bash
+# Terminal 1: backend en http://localhost:8000
+set -a
+source .env
+set +a
+uvicorn main:app --reload
+
+# Terminal 2: interfaz en http://localhost:3000
+cd frontend
+npm install
+npm run dev
+```
+
+Abre `http://localhost:3000`. La URL de la API se puede cambiar desde el panel
+izquierdo; si omites la ruta se añade `/api/v1` automáticamente. También se
+puede fijar en tiempo de compilación copiando `frontend/.env.example` a
+`frontend/.env` y ajustando `VITE_API_URL`. El token de la sesión se guarda en
+`localStorage` y se envía como `Authorization: Bearer <token>`.
+
+Características de la interfaz:
+
+- Dashboard con los tres endpoints de salud y el resumen de almacenes.
+- Inventarios paginados con `limit`, `offset` y `X-Total-Count`.
+- Creación de sesiones de cliente y administrador, consulta de estado y cierre.
+- Lista de compras con alta, baja y exportación CSV.
+- Búsqueda en los modos `mejor_precio`, `catalogo` y `global`.
+- Carrito con alta de ítems, eliminación por índice, vaciado y descuentos.
+- Administración de productos, precios, bajas, importación CSV y comparador.
+- Descarga de la lista y del carrito en CSV.
+
+Para compilar la versión de producción:
+
+```bash
+cd frontend
+npm run build
+```
+
+CORS ya permite `http://localhost:3000` y `http://localhost:5173` con el
+`.env.example` incluido. Si usas otro puerto, añade el origen a
+`CORS_ORIGINS` y reinicia la API. También existen los atajos `make
+frontend-install`, `make frontend-dev` y `make frontend-build`.
+
 ## Variables de entorno
 
 | Variable | Obligatoria | Defecto | Descripción |
@@ -218,6 +274,7 @@ python main.py
 | `ADMIN_CLAVE` | Sí | — | Clave administrativa. Mínimo 8 caracteres. No existe valor por defecto. |
 | `MONGODB_DB_PREFIX` | No | `warehouse` | Prefijo de bases: `warehouse_1`, `warehouse_2`, ... |
 | `MONGODB_COMPARADOR_DB` | No | `comparador` | Base integrada de solo lectura mantenida por el listener. |
+| `MONGODB_SEGURIDAD_DB` | No | `seguridad` | Base de roles y usuarios persistidos. No puede coincidir con la del comparador ni con la de un almacén. |
 | `MONGO_REPLICA_HOST` | No | `mongodb:27017` | Host que anuncia `mongo-init` como miembro de `rs0` en Docker. |
 | `WAREHOUSES` | No | `1,2,3` | Almacenes con formato `1:Centro,2:Norte`. |
 | `MONGODB_TIMEOUT_MS` | No | `5000` | Timeout de selección/conexión de MongoDB. |
@@ -250,6 +307,40 @@ curl -s -X POST http://localhost:8000/api/v1/sessions/admin \
   -d "{\"clave\":\"$ADMIN_CLAVE\"}"
 ```
 
+### Roles y proveedores
+
+Los roles se persisten en MongoDB y cada sesión recibe la lista efectiva de
+permisos. La matriz canónica es:
+
+| Rol | Alcance |
+| --- | --- |
+| `INVITADO` | Solo `ver_menu`. |
+| `CLIENTE` | Lista, carrito, búsqueda/comparación, descuentos y exportación. |
+| `PROVEEDOR` | Inventario del almacén asignado: altas, bajas, precios e importación CSV. |
+| `ADMIN` | Todos los almacenes, usuarios, comparador y funciones de comprador para soporte. |
+
+Un administrador crea el proveedor y le asigna un almacén:
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/sessions/$ADMIN_TOKEN/users/providers \
+  -H 'Content-Type: application/json' \
+  -d '{"nombre":"Distribuidora Norte","almacen_id":1}'
+```
+
+Después, el proveedor inicia sesión solo con su nombre:
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/sessions/provider \
+  -H 'Content-Type: application/json' \
+  -d '{"nombre":"Distribuidora Norte"}'
+```
+
+El catálogo público de roles y permisos está en `GET /api/v1/roles` y
+`GET /api/v1/roles/{rol}`. La gestión de usuarios requiere `ADMIN` y se expone
+bajo `/api/v1/sessions/{token}/users`. Si una operación no está permitida, la
+API responde `403` con `detalles.permiso` y `detalles.rol`; la interfaz muestra
+un aviso "Acción no permitida".
+
 ### Endpoints principales
 
 | Método | Ruta | Descripción |
@@ -260,9 +351,15 @@ curl -s -X POST http://localhost:8000/api/v1/sessions/admin \
 | `GET` | `/api/v1/warehouses` | Almacenes y cantidad de productos. |
 | `GET` | `/api/v1/warehouses/{id}/products` | Inventario paginado (`limit`, `offset`, `X-Total-Count`). |
 | `POST` | `/api/v1/sessions/user` | Crea sesión de cliente. |
+| `POST` | `/api/v1/sessions/provider` | Crea sesión de proveedor por nombre. |
 | `POST` | `/api/v1/sessions/admin` | Crea sesión de administrador. |
-| `GET` | `/api/v1/sessions/{token}` | Estado, lista y carrito. |
+| `GET` | `/api/v1/sessions/{token}` | Estado, rol, permisos, lista y carrito. |
 | `DELETE` | `/api/v1/sessions/{token}` | Cierra la sesión. |
+| `GET` | `/api/v1/roles` | Catálogo de roles, permisos y descripciones. |
+| `GET` | `/api/v1/roles/{rol}` | Detalle de un rol. |
+| `GET` | `/api/v1/sessions/{token}/users` | Lista usuarios persistidos (`ADMIN`). |
+| `POST` | `/api/v1/sessions/{token}/users/providers` | Crea un proveedor con almacén (`ADMIN`). |
+| `PATCH` | `/api/v1/sessions/{token}/users/{usuario_id}` | Cambia rol, almacén o estado (`ADMIN`). |
 | `GET` | `/api/v1/sessions/{token}/shopping-list` | Lista de compras. |
 | `POST` | `/api/v1/sessions/{token}/shopping-list` | Agrega un producto. |
 | `DELETE` | `/api/v1/sessions/{token}/shopping-list/{nombre}` | Elimina un producto. |

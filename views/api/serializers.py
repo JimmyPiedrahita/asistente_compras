@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from models.permisos import descripcion_de
+
 
 def producto_json(producto: Any) -> dict[str, Any]:
     resultado: dict[str, Any] = {
@@ -55,9 +57,14 @@ def resumen_carrito_json(resumen: dict[str, Any]) -> dict[str, Any]:
 
 
 def estado_sesion_json(controlador: Any) -> dict[str, Any]:
+    rol = controlador.obtener_rol()
     return {
         "usuario": controlador.obtener_usuario_actual(),
-        "rol": controlador.obtener_rol(),
+        "rol": rol,
+        "descripcion_rol": descripcion_de(rol),
+        "permisos": list(controlador.obtener_permisos()),
+        "almacen_id": controlador.obtener_almacen_id(),
+        "usuario_id": controlador.obtener_usuario_id(),
         "lista": controlador.obtener_compras_usuario(),
         "carrito": resumen_carrito_json(controlador.obtener_resumen_carrito()),
     }

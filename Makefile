@@ -1,8 +1,9 @@
 PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
 RUFF ?= .venv/bin/ruff
+NPM ?= npm
 
-.PHONY: install install-dev test lint format openapi seed listener reconcile docker-up docker-down docker-seed docker-reconcile
+.PHONY: install install-dev test lint format openapi seed listener reconcile docker-up docker-down docker-seed docker-reconcile frontend-install frontend-dev frontend-build
 
 install:
 	$(PIP) install -r requirements.txt
@@ -44,3 +45,12 @@ docker-seed:
 
 docker-reconcile:
 	docker compose exec listener python scripts/reconciliar_comparador.py
+
+frontend-install:
+	cd frontend && $(NPM) install
+
+frontend-dev:
+	cd frontend && $(NPM) run dev
+
+frontend-build:
+	cd frontend && $(NPM) run build

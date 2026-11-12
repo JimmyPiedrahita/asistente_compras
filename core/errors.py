@@ -54,8 +54,13 @@ class NoPermitido(ErrorAplicacion):
     status_code = 403
     codigo = "operacion_no_permitida"
 
-    def __init__(self, operacion: str) -> None:
-        super().__init__(f"Operación no permitida: {operacion}")
+    def __init__(self, operacion: str, *, rol: str | None = None) -> None:
+        mensaje = f"Operación no permitida: {operacion}"
+        detalles: dict[str, object] = {"permiso": operacion}
+        if rol:
+            detalles["rol"] = rol
+            mensaje = f"{mensaje} (rol {rol})"
+        super().__init__(mensaje, detalles=detalles)
 
 
 class NoEncontrado(ErrorAplicacion):

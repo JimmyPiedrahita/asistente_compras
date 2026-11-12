@@ -45,6 +45,9 @@ class SesionCreada(ModeloBase):
     session_id: str
     usuario: str
     rol: str
+    permisos: list[str] = Field(default_factory=list)
+    almacen_id: int | None = None
+    usuario_id: str | None = None
 
 
 class BusquedaSolicitud(ModeloBase):
@@ -95,6 +98,10 @@ class ResumenCarrito(ModeloBase):
 class EstadoSesion(ModeloBase):
     usuario: str | None
     rol: str
+    descripcion_rol: str = ""
+    permisos: list[str] = Field(default_factory=list)
+    almacen_id: int | None = None
+    usuario_id: str | None = None
     lista: list[str]
     carrito: ResumenCarrito
 

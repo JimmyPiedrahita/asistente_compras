@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from .almacenes import Almacen
 from .listas import ListaSimple
 from .productos import Producto
+from .seguridad import Rol, Usuario
 
 
 class InventarioRepository(Protocol):
@@ -52,4 +53,42 @@ class InventarioRepository(Protocol):
     def close(self) -> None: ...
 
 
-__all__ = ["InventarioRepository"]
+class SeguridadRepository(Protocol):
+    """Contrato de persistencia de roles y usuarios.
+
+    ``inicializar`` debe ser idempotente: crea índices y sincroniza los roles
+    canónicos sin borrar usuarios existentes.
+    """
+
+    def inicializar(self) -> None: ...
+
+    def listar_roles(self) -> list[Rol]: ...
+
+    def obtener_rol(self, nombre: str) -> Rol | None: ...
+
+    def listar_usuarios(self) -> list[Usuario]: ...
+
+    def obtener_usuario(self, usuario_id: str) -> Usuario | None: ...
+
+    def buscar_usuario_por_nombre(self, nombre: str) -> Usuario | None: ...
+
+    def crear_usuario(
+        self,
+        nombre: str,
+        rol: str,
+        almacen_id: int | None = None,
+    ) -> Usuario: ...
+
+    def actualizar_usuario(
+        self,
+        usuario_id: str,
+        *,
+        rol: str | None = None,
+        almacen_id: int | object | None = ...,
+        activo: bool | None = None,
+    ) -> Usuario | None: ...
+
+    def close(self) -> None: ...
+
+
+__all__ = ["InventarioRepository", "SeguridadRepository"]

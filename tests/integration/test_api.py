@@ -576,6 +576,167 @@ class PruebasApi(unittest.TestCase):
         self.assertEqual(esquema.status_code, 200)
         self.assertIn("/api/v1/sessions/user", esquema.json()["paths"])
 
+    # Roles, usuarios y proveedor --------------------------------------
+    def _crear_proveedor(self, admin: str, nombre: str = "Proveedor Uno", almacen: int = 1):
+        respuesta = self.cliente.post(
+            f"/api/sessions/{admin}/users/providers",
+            json={"nombre": nombre, "almacen_id": almacen},
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        return respuesta.json()
+
+    def _sesion_proveedor(self, nombre: str = "Proveedor Uno") -> str:
+        respuesta = self.cliente.post("/api/sessions/provider", json={"nombre": nombre})
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        return respuesta.json()["session_id"]
+
+    def test_catalogo_de_roles_y_permisos(self) -> None:
+        respuesta = self.cliente.get("/api/v1/roles")
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        datos = respuesta.json()
+        roles = {rol["rol"]: rol for rol in datos["roles"]}
+        self.assertEqual(set(roles), {"INVITADO", "CLIENTE", "PROVEEDOR", "ADMIN"})
+        self.assertIn("gestionar_inventario", roles["PROVEEDOR"]["permisos"])
+        self.assertNotIn("crear_lista", roles["PROVEEDOR"]["permisos"])
+        self.assertNotIn("gestionar_usuarios", roles["CLIENTE"]["permisos"])
+        self.assertIn("gestionar_usuarios", roles["ADMIN"]["permisos"])
+        permisos = {permiso["codigo"] for permiso in datos["permisos"]}
+        self.assertIn("editar_precio", permisos)
+        self.assertIn("importar_csv", permisos)
+
+        proveedor = self.cliente.get("/api/v1/roles/proveedor")
+        self.assertEqual(proveedor.status_code, 200)
+        self.assertEqual(proveedor.json()["rol"], "PROVEEDOR")
+
+        inexistente = self.cliente.get("/api/v1/roles/OTRO")
+        self.assertEqual(inexistente.status_code, 404)
+
+    def test_admin_gestiona_proveedores(self) -> None:
+        admin = self._sesion_admin()
+        proveedor = self._crear_proveedor(admin, "Distribuidora Norte", 2)
+        self.assertEqual(proveedor["rol"], "PROVEEDOR")
+        self.assertEqual(proveedor["almacen_id"], 2)
+        self.assertTrue(proveedor["activo"])
+
+        duplicado = self.cliente.post(
+            f"/api/sessions/{admin}/users/providers",
+            json={"nombre": "Distribuidora Norte", "almacen_id": 1},
+        )
+        self.assertEqual(duplicado.status_code, 409)
+
+        almacen_invalido = self.cliente.post(
+            f"/api/sessions/{admin}/users/providers",
+            json={"nombre": "Otro", "almacen_id": 99},
+        )
+        self.assertEqual(almacen_invalido.status_code, 404)
+
+        listado = self.cliente.get(f"/api/sessions/{admin}/users")
+        self.assertEqual(listado.status_code, 200)
+        self.assertEqual([u["nombre"] for u in listado.json()], ["Distribuidora Norte"])
+
+        usuario_id = proveedor["usuario_id"]
+        desactivado = self.cliente.patch(
+            f"/api/sessions/{admin}/users/{usuario_id}",
+            json={"activo": False},
+        )
+        self.assertEqual(desactivado.status_code, 200, desactivado.text)
+        self.assertFalse(desactivado.json()["activo"])
+
+        login_inactivo = self.cliente.post(
+            "/api/sessions/provider", json={"nombre": "Distribuidora Norte"}
+        )
+        self.assertEqual(login_inactivo.status_code, 401)
+
+        reactivado = self.cliente.patch(
+            f"/api/sessions/{admin}/users/{usuario_id}",
+            json={"activo": True, "almacen_id": 3},
+        )
+        self.assertEqual(reactivado.status_code, 200, reactivado.text)
+        self.assertEqual(reactivado.json()["almacen_id"], 3)
+
+        proveedor_sin_almacen = self.cliente.patch(
+            f"/api/sessions/{admin}/users/{usuario_id}",
+            json={"almacen_id": None},
+        )
+        self.assertEqual(proveedor_sin_almacen.status_code, 400)
+
+    def test_proveedor_solo_opera_su_almacen(self) -> None:
+        admin = self._sesion_admin()
+        self._crear_proveedor(admin, "Proveedor Norte", 1)
+        proveedor = self._sesion_proveedor("Proveedor Norte")
+
+        crear_propio = self.cliente.post(
+            f"/api/sessions/{proveedor}/admin/warehouses/1/products",
+            json={"nombre": "Leche", "precio": 1000},
+        )
+        self.assertEqual(crear_propio.status_code, 200, crear_propio.text)
+
+        crear_ajeno = self.cliente.post(
+            f"/api/sessions/{proveedor}/admin/warehouses/2/products",
+            json={"nombre": "Pan", "precio": 500},
+        )
+        self.assertEqual(crear_ajeno.status_code, 403)
+        self.assertIn("almacén", crear_ajeno.json()["error"].lower())
+
+        producto = self._producto(1)
+        precio_propio = self.cliente.patch(
+            f"/api/sessions/{proveedor}/admin/warehouses/1/products",
+            json={"producto_id": producto["producto_id"], "precio": 900},
+        )
+        self.assertEqual(precio_propio.status_code, 200, precio_propio.text)
+        self.assertEqual(self._producto(1)["precio"], 900)
+
+        precio_ajeno = self.cliente.patch(
+            f"/api/sessions/{proveedor}/admin/warehouses/2/products",
+            json={"producto_id": producto["producto_id"], "precio": 800},
+        )
+        self.assertEqual(precio_ajeno.status_code, 403)
+
+        csv = self.cliente.post(
+            f"/api/sessions/{proveedor}/admin/csv",
+            json={
+                "contenido": (
+                    "almacen,nombre,marca,precio\n1,Arroz,Generica,100\n2,Fideos,Generica,200\n"
+                )
+            },
+        )
+        self.assertEqual(csv.status_code, 200, csv.text)
+        self.assertEqual(csv.json()["importados"], 1)
+        self.assertEqual(csv.json()["rechazados"], 1)
+
+        estado = self.cliente.get(f"/api/sessions/{proveedor}")
+        self.assertEqual(estado.status_code, 200)
+        self.assertEqual(estado.json()["rol"], "PROVEEDOR")
+        self.assertEqual(estado.json()["almacen_id"], 1)
+        self.assertIn("gestionar_inventario", estado.json()["permisos"])
+        self.assertNotIn("crear_lista", estado.json()["permisos"])
+
+        comparador = self.cliente.get(f"/api/sessions/{proveedor}/admin/comparador/status")
+        self.assertEqual(comparador.status_code, 403)
+
+        busqueda = self.cliente.post(f"/api/sessions/{proveedor}/search", json={})
+        self.assertEqual(busqueda.status_code, 403)
+
+        usuarios = self.cliente.get(f"/api/sessions/{proveedor}/users")
+        self.assertEqual(usuarios.status_code, 403)
+
+    def test_cliente_no_puede_gestionar_usuarios_ni_inventario(self) -> None:
+        cliente = self._sesion_usuario("Cliente Uno")
+        usuarios = self.cliente.get(f"/api/sessions/{cliente}/users")
+        self.assertEqual(usuarios.status_code, 403)
+        self.assertIn("Listar usuarios", usuarios.json()["error"])
+
+        inventario = self.cliente.post(
+            f"/api/sessions/{cliente}/admin/warehouses/1/products",
+            json={"nombre": "Leche", "precio": 100},
+        )
+        self.assertEqual(inventario.status_code, 403)
+
+    def test_login_proveedor_inexistente(self) -> None:
+        respuesta = self.cliente.post("/api/sessions/provider", json={"nombre": "Nadie"})
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertEqual(respuesta.json()["codigo"], "credenciales_invalidas")
+
 
 if __name__ == "__main__":
     unittest.main()

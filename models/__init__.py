@@ -10,7 +10,8 @@ from .productos import (
     ProductoFisico,
     ProductoSuscripcion,
 )
-from .repositorios import InventarioRepository
+from .repositorios import InventarioRepository, SeguridadRepository
+from .seguridad import Rol, SeguridadEnMemoria, Usuario
 from .texto import normalizar_texto
 
 __all__ = [
@@ -25,5 +26,9 @@ __all__ = [
     "ProductoDigital",
     "ProductoFisico",
     "ProductoSuscripcion",
+    "Rol",
+    "SeguridadEnMemoria",
+    "SeguridadRepository",
+    "Usuario",
     "normalizar_texto",
 ]

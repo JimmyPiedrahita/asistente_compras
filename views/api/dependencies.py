@@ -22,6 +22,10 @@ def obtener_gestor(request: Request) -> GestorAlmacenes:
     return request.app.state.gestor
 
 
+def obtener_seguridad(request: Request):
+    return request.app.state.seguridad
+
+
 def obtener_sesion(
     request: Request,
     token: str = Path(..., description="Token de sesión"),
@@ -47,5 +51,6 @@ __all__ = [
     "obtener_gestor",
     "obtener_registro",
     "obtener_repositorio",
+    "obtener_seguridad",
     "obtener_sesion",
 ]

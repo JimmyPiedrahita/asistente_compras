@@ -8,12 +8,14 @@ from . import (
     exportacion,
     lista_compra,
     salud,
+    seguridad,
     sesiones,
 )
 
 ROUTERS = (
     salud.router,
     almacenes.router,
+    seguridad.router,
     sesiones.router,
     lista_compra.router,
     busqueda.router,

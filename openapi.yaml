@@ -115,6 +115,217 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/roles:
+    get:
+      tags:
+      - Seguridad
+      summary: Listar Roles
+      description: 'Catálogo público: qué puede hacer cada rol y qué significa cada
+        permiso.'
+      operationId: listar_roles_api_v1_roles_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogoRolesRespuesta'
+  /api/v1/roles/{rol}:
+    get:
+      tags:
+      - Seguridad
+      summary: Obtener Rol
+      operationId: obtener_rol_api_v1_roles__rol__get
+      parameters:
+      - name: rol
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Rol
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/users:
+    get:
+      tags:
+      - Seguridad
+      summary: Listar Usuarios
+      operationId: listar_usuarios_api_v1_sessions__token__users_get
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsuarioRespuesta'
+                title: Response Listar Usuarios Api V1 Sessions  Token  Users Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/users/{usuario_id}:
+    get:
+      tags:
+      - Seguridad
+      summary: Obtener Usuario
+      operationId: obtener_usuario_api_v1_sessions__token__users__usuario_id__get
+      parameters:
+      - name: usuario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Usuario Id
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - Seguridad
+      summary: Actualizar Usuario
+      operationId: actualizar_usuario_api_v1_sessions__token__users__usuario_id__patch
+      parameters:
+      - name: usuario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Usuario Id
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioActualizacion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{token}/users/providers:
+    post:
+      tags:
+      - Seguridad
+      summary: Crear Proveedor
+      operationId: crear_proveedor_api_v1_sessions__token__users_providers_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Token de sesión
+          title: Token
+        description: Token de sesión
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProveedorSolicitud'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sessions/user:
     post:
       tags:
@@ -126,6 +337,31 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UsuarioSesion'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SesionCreada'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/provider:
+    post:
+      tags:
+      - Sesiones
+      summary: Iniciar Proveedor
+      operationId: iniciar_proveedor_api_v1_sessions_provider_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProveedorSesion'
         required: true
       responses:
         '201':
@@ -1025,6 +1261,23 @@ components:
       - almacen_id
       - producto_id
       title: CarritoProductoSolicitud
+    CatalogoRolesRespuesta:
+      properties:
+        roles:
+          items:
+            $ref: '#/components/schemas/RolRespuesta'
+          type: array
+          title: Roles
+        permisos:
+          items:
+            $ref: '#/components/schemas/PermisoRespuesta'
+          type: array
+          title: Permisos
+      type: object
+      required:
+      - roles
+      - permisos
+      title: CatalogoRolesRespuesta
     ClaveAdministrador:
       properties:
         clave:
@@ -1101,6 +1354,25 @@ components:
         rol:
           type: string
           title: Rol
+        descripcion_rol:
+          type: string
+          title: Descripcion Rol
+          default: ''
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+        almacen_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Almacen Id
+        usuario_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Usuario Id
         lista:
           items:
             type: string
@@ -1187,6 +1459,19 @@ components:
           default: true
       type: object
       title: OkRespuesta
+    PermisoRespuesta:
+      properties:
+        codigo:
+          type: string
+          title: Codigo
+        descripcion:
+          type: string
+          title: Descripcion
+      type: object
+      required:
+      - codigo
+      - descripcion
+      title: PermisoRespuesta
     PrecioSolicitud:
       properties:
         producto_id:
@@ -1292,6 +1577,33 @@ components:
       - nombre
       - precio
       title: ProductoSolicitud
+    ProveedorSesion:
+      properties:
+        nombre:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Nombre
+      type: object
+      required:
+      - nombre
+      title: ProveedorSesion
+    ProveedorSolicitud:
+      properties:
+        nombre:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Nombre
+        almacen_id:
+          type: integer
+          minimum: 1.0
+          title: Almacen Id
+      type: object
+      required:
+      - nombre
+      - almacen_id
+      title: ProveedorSolicitud
     ResultadoBusquedaItem:
       properties:
         almacen_id:
@@ -1331,6 +1643,29 @@ components:
       - total
       - descuento
       title: ResumenCarrito
+    RolRespuesta:
+      properties:
+        rol:
+          type: string
+          title: Rol
+        descripcion:
+          type: string
+          title: Descripcion
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+        sistema:
+          type: boolean
+          title: Sistema
+          default: true
+      type: object
+      required:
+      - rol
+      - descripcion
+      - permisos
+      title: RolRespuesta
     SesionCreada:
       properties:
         session_id:
@@ -1342,12 +1677,84 @@ components:
         rol:
           type: string
           title: Rol
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+        almacen_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Almacen Id
+        usuario_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Usuario Id
       type: object
       required:
       - session_id
       - usuario
       - rol
       title: SesionCreada
+    UsuarioActualizacion:
+      properties:
+        rol:
+          anyOf:
+          - type: string
+            enum:
+            - INVITADO
+            - CLIENTE
+            - PROVEEDOR
+            - ADMIN
+          - type: 'null'
+          title: Rol
+        almacen_id:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Almacen Id
+        activo:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Activo
+      type: object
+      title: UsuarioActualizacion
+      description: 'PATCH parcial: solo se aplican los campos enviados.'
+    UsuarioRespuesta:
+      properties:
+        usuario_id:
+          type: string
+          title: Usuario Id
+        nombre:
+          type: string
+          title: Nombre
+        rol:
+          type: string
+          title: Rol
+        almacen_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Almacen Id
+        activo:
+          type: boolean
+          title: Activo
+        creado_en:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Creado En
+      type: object
+      required:
+      - usuario_id
+      - nombre
+      - rol
+      - activo
+      title: UsuarioRespuesta
     UsuarioSesion:
       properties:
         nombre:
@@ -1390,8 +1797,10 @@ tags:
   description: Disponibilidad de la API y MongoDB.
 - name: Almacenes
   description: Almacenes e inventarios.
+- name: Seguridad
+  description: Roles, permisos y usuarios.
 - name: Sesiones
-  description: Sesiones de cliente y administrador.
+  description: Sesiones de cliente, proveedor y administrador.
 - name: Lista de compras
   description: Lista personal del cliente.
 - name: Búsqueda

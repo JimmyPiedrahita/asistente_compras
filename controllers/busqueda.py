@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.errors import NoPermitido, SolicitudInvalida
+from core.errors import SolicitudInvalida
 from models.permisos import COMPARAR
 
 from .contexto import ContextoSesion
@@ -28,7 +28,7 @@ class ControladorBusqueda:
         if modo_norm not in MODOS:
             raise SolicitudInvalida("Modo inválido: use mejor_precio, catalogo o global")
         if not self.contexto.autorizar(COMPARAR):
-            raise NoPermitido(COMPARAR)
+            raise self.contexto.error_permiso(COMPARAR)
 
         nombres = list(self.contexto.lista_compras.mostrar())
         limite = LIMITE_CATALOGO if limit is None else int(limit)

@@ -36,6 +36,11 @@ htmlcov/
 junit*.xml
 nosetests.xml
 
+# Frontend (React + Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
 # Variables de entorno y secretos locales
 .env
 .env.*

@@ -20,7 +20,7 @@ class ControladorExportacion:
 
     def _verificar_permiso(self) -> None:
         if not self.contexto.autorizar(EXPORTAR):
-            raise NoPermitido(EXPORTAR)
+            raise self.contexto.error_permiso(EXPORTAR)
 
     def _filas_lista(self) -> list[dict[str, Any]]:
         with self.contexto.gestor_almacenes.candado:
