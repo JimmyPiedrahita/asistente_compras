@@ -62,6 +62,14 @@ class AlmacenRespuesta(ModeloBase):
     products: int
 
 
+class ComparadorEstadoRespuesta(ModeloBase):
+    estado: str
+    documentos: int = 0
+    ultima_sincronizacion: str | None = None
+    ultimo_evento: str | None = None
+    tiene_resume_token: bool = False
+
+
 class OkRespuesta(ModeloBase):
     ok: bool = True
 
@@ -74,6 +82,7 @@ class ImportacionCsvRespuesta(ModeloBase):
 
 __all__ = [
     "AlmacenRespuesta",
+    "ComparadorEstadoRespuesta",
     "CsvSolicitud",
     "ImportacionCsvRespuesta",
     "OkRespuesta",

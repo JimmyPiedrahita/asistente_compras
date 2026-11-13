@@ -29,6 +29,7 @@ class RegistroSesiones:
         gestor_almacenes: GestorAlmacenes,
         *,
         admin_clave: str,
+        seguridad: object | None = None,
         ttl_seconds: int = 3600,
         max_sesiones: int = 1000,
         max_csv_bytes: int = 1_000_000,
@@ -37,6 +38,7 @@ class RegistroSesiones:
     ) -> None:
         self._gestor_almacenes = gestor_almacenes
         self._admin_clave = admin_clave
+        self._seguridad = seguridad
         self._ttl_seconds = int(ttl_seconds)
         self._max_sesiones = int(max_sesiones)
         self._max_csv_bytes = int(max_csv_bytes)
@@ -55,6 +57,7 @@ class RegistroSesiones:
             controlador = ControladorCompras(
                 gestor_almacenes=self._gestor_almacenes,
                 clave_admin=self._admin_clave,
+                seguridad=self._seguridad,
                 max_csv_bytes=self._max_csv_bytes,
                 vista=self._vista_factory(),
             )

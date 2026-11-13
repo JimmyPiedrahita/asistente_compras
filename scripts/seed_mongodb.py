@@ -32,6 +32,7 @@ def cargar(archivo: Path) -> tuple[int, int, int, list[str]]:
     repositorio = MongoInventarioRepository(
         settings.mongodb_uri,
         settings.almacenes,
+        comparador_db=settings.mongodb_comparador_db,
         timeout_ms=settings.mongodb_timeout_ms,
     )
     insertados = actualizados = rechazados = 0

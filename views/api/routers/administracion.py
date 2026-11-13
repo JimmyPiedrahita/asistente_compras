@@ -5,16 +5,22 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from controllers.compras import ControladorCompras
-from models.permisos import EDITAR_PRECIO, GESTIONAR_ALMACENES
+from models.permisos import (
+    EDITAR_PRECIO,
+    GESTIONAR_COMPARADOR,
+    GESTIONAR_INVENTARIO,
+)
 
 from ..dependencies import obtener_controlador
 from ..schemas import (
+    ComparadorEstadoRespuesta,
     CsvSolicitud,
     ImportacionCsvRespuesta,
     OkRespuesta,
     PrecioSolicitud,
     ProductoSolicitud,
 )
+from ..serializers import comparador_estado_json
 from .comun import verificar_resultado
 
 router = APIRouter(tags=["Administración"])
@@ -45,7 +51,8 @@ def agregar_producto(
     )
     verificar_resultado(
         resultado,
-        permiso=GESTIONAR_ALMACENES,
+        permiso=GESTIONAR_INVENTARIO,
+        controlador=controlador,
         no_encontrado="Almacén no encontrado",
         conflicto="El producto ya existe en el almacén",
         invalido="Datos del producto inválidos",
@@ -66,8 +73,28 @@ def editar_precio(
     verificar_resultado(
         resultado,
         permiso=EDITAR_PRECIO,
+        controlador=controlador,
         no_encontrado="Producto o almacén no encontrado",
         invalido="Precio inválido",
+    )
+    return {"ok": True}
+
+
+@router.delete(
+    "/sessions/{token}/admin/warehouses/{almacen_id}/products/{producto_id}",
+    response_model=OkRespuesta,
+)
+def eliminar_producto(
+    almacen_id: int,
+    producto_id: str,
+    controlador: ControladorCompras = Depends(obtener_controlador),
+):
+    resultado = controlador.eliminar_producto_almacen(almacen_id, producto_id)
+    verificar_resultado(
+        resultado,
+        permiso=GESTIONAR_INVENTARIO,
+        controlador=controlador,
+        no_encontrado="Producto o almacén no encontrado",
     )
     return {"ok": True}
 
@@ -83,6 +110,28 @@ def cargar_csv(
     return controlador.cargar_csv_contenido(datos.contenido)
 
 
+@router.get(
+    "/sessions/{token}/admin/comparador/status",
+    response_model=ComparadorEstadoRespuesta,
+)
+def estado_comparador(
+    controlador: ControladorCompras = Depends(obtener_controlador),
+):
+    return comparador_estado_json(controlador.estado_comparador())
+
+
+@router.post(
+    "/sessions/{token}/admin/comparador/reconciliar",
+    response_model=OkRespuesta,
+)
+def reconciliar_comparador(
+    controlador: ControladorCompras = Depends(obtener_controlador),
+):
+    resultado = controlador.recargar_inventarios()
+    verificar_resultado(resultado, permiso=GESTIONAR_COMPARADOR, controlador=controlador)
+    return {"ok": True}
+
+
 @router.post(
     "/sessions/{token}/admin/reload",
     response_model=OkRespuesta,
@@ -91,7 +140,7 @@ def recargar_inventarios(
     controlador: ControladorCompras = Depends(obtener_controlador),
 ):
     resultado = controlador.recargar_inventarios()
-    verificar_resultado(resultado, permiso=GESTIONAR_ALMACENES)
+    verificar_resultado(resultado, permiso=GESTIONAR_COMPARADOR, controlador=controlador)
     return {"ok": True}
 
 

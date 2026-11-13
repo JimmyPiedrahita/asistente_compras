@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asistente-compras"
-version = "3.0.0"
+version = "3.1.0"
 description = "API REST MVC multi-almacén para comparación de compras con MongoDB"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -35,6 +35,7 @@ class ControladorCompras:
         gestor_almacenes: GestorAlmacenes | None = None,
         *,
         clave_admin: str | None = None,
+        seguridad: object | None = None,
         settings: Settings | None = None,
         max_csv_bytes: int | None = None,
         logger: logging.Logger | None = None,
@@ -51,7 +52,7 @@ class ControladorCompras:
         self.lista_compras = ListaDoblementeEnlazada()
         self.logger = logger or obtener_logger("asistente_compras.compras")
 
-        self.sesion = ControladorSesion(self._clave_admin)
+        self.sesion = ControladorSesion(self._clave_admin, seguridad=seguridad)
         self.contexto = ContextoSesion(
             sesion=self.sesion,
             carrito=self.carrito,
@@ -81,6 +82,9 @@ class ControladorCompras:
     def iniciar_sesion(self, nombre: str) -> bool:
         return self.sesion.iniciar_sesion(nombre)
 
+    def iniciar_sesion_proveedor(self, nombre: str) -> bool:
+        return self.sesion.iniciar_sesion_proveedor(nombre)
+
     def cerrar_sesion(self) -> None:
         self.sesion.cerrar_sesion()
         self.carrito_controller.limpiar_descuento()
@@ -88,8 +92,23 @@ class ControladorCompras:
     def obtener_usuario_actual(self) -> str | None:
         return self.sesion.usuario_actual
 
+    def obtener_usuario_id(self) -> str | None:
+        return self.sesion.usuario_id
+
     def obtener_rol(self) -> str:
         return self.sesion.rol
+
+    def obtener_permisos(self) -> tuple[str, ...]:
+        return self.sesion.permisos
+
+    def obtener_almacen_id(self) -> int | None:
+        return self.sesion.almacen_id
+
+    def es_admin(self) -> bool:
+        return self.sesion.es_admin
+
+    def es_proveedor(self) -> bool:
+        return self.sesion.es_proveedor
 
     def login_admin(self, clave: str) -> bool:
         return self.sesion.login_admin(clave)
@@ -173,6 +192,17 @@ class ControladorCompras:
 
     def listar_productos(self, id_almacen: int) -> list[Any]:
         return self.inventario.listar_productos(id_almacen)
+
+    def listar_productos_paginados(
+        self, id_almacen: int, limit: int = 100, offset: int = 0
+    ) -> tuple[list[Any], int]:
+        return self.inventario.listar_productos_paginados(id_almacen, limit, offset)
+
+    def eliminar_producto_almacen(self, id_almacen: int, producto_id: str):
+        return self.inventario.eliminar_producto(id_almacen, producto_id)
+
+    def estado_comparador(self) -> dict[str, Any]:
+        return self.inventario.estado_comparador()
 
     def recargar_inventarios(self):
         return self.inventario.recargar_inventarios()

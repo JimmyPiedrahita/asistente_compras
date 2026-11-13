@@ -3,6 +3,7 @@
 from .base import ErrorRespuesta, ModeloBase
 from .productos import (
     AlmacenRespuesta,
+    ComparadorEstadoRespuesta,
     CsvSolicitud,
     ImportacionCsvRespuesta,
     OkRespuesta,
@@ -10,6 +11,16 @@ from .productos import (
     ProductoRespuesta,
     ProductoSolicitud,
     TipoProducto,
+)
+from .seguridad import (
+    CatalogoRolesRespuesta,
+    PermisoRespuesta,
+    ProveedorSesion,
+    ProveedorSolicitud,
+    RolNombre,
+    RolRespuesta,
+    UsuarioActualizacion,
+    UsuarioRespuesta,
 )
 from .sesiones import (
     BusquedaRespuesta,
@@ -34,7 +45,9 @@ __all__ = [
     "BusquedaRespuesta",
     "BusquedaSolicitud",
     "CarritoProductoSolicitud",
+    "CatalogoRolesRespuesta",
     "ClaveAdministrador",
+    "ComparadorEstadoRespuesta",
     "CsvSolicitud",
     "DescuentoSolicitud",
     "ErrorRespuesta",
@@ -46,13 +59,20 @@ __all__ = [
     "ModeloBase",
     "ModoBusqueda",
     "OkRespuesta",
+    "PermisoRespuesta",
     "PrecioSolicitud",
     "ProductoRespuesta",
     "ProductoSolicitud",
+    "ProveedorSesion",
+    "ProveedorSolicitud",
     "ResultadoBusquedaItem",
     "ResumenCarrito",
+    "RolNombre",
+    "RolRespuesta",
     "SesionCreada",
     "TipoDescuento",
     "TipoProducto",
+    "UsuarioActualizacion",
+    "UsuarioRespuesta",
     "UsuarioSesion",
 ]

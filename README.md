@@ -1,8 +1,9 @@
 # Asistente de compras
 
 API REST multi-almacén para comparar precios y gestionar listas y carritos de
-compra. El backend está organizado siguiendo MVC y usa **una base de datos
-MongoDB independiente por almacén**.
+compra. El backend está organizado siguiendo MVC, usa **una base de datos
+MongoDB independiente por almacén** y mantiene una base integrada
+`comparador` sincronizada mediante **Change Streams** sobre un replica set.
 
 - Documentación de arquitectura: [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md)
 - Contrato HTTP: [`openapi.yaml`](openapi.yaml)
@@ -16,9 +17,12 @@ MongoDB independiente por almacén**.
   global.
 - Productos normales, físicos, digitales y por suscripción.
 - Carrito con descuento porcentual o fijo.
-- Alta de productos, edición de precios e importación CSV.
+- Alta de productos, edición de precios, eliminación e importación CSV.
 - Exportación CSV de la lista y del carrito.
-- Inventario en caché al arrancar y recarga administrativa desde MongoDB.
+- Base integrada `comparador` con `_id` compuesto, índices y paginación.
+- Sincronización automática de altas, cambios y bajas mediante Change Streams.
+- Reconciliación administrativa y estado de la proyección.
+- Catálogo consultado en MongoDB: no se carga completo en memoria.
 - Compatibilidad con las rutas anteriores bajo `/api`; la versión recomendada
   es `/api/v1`.
 
@@ -29,12 +33,13 @@ main.py                         Punto de entrada ASGI
 core/                           Configuración, errores, logging, Observer, resultados
 models/                         Entidades, listas enlazadas, carrito, permisos
 models/estrategias/             Strategy: búsquedas y descuentos
-infrastructure/mongodb/         Cliente, índices, repositorio por almacén
+infrastructure/mongodb/         Cliente, índices, repositorio y proyector comparador
 controllers/                    Casos de uso y fachada ControladorCompras
 views/api/                      FastAPI, DTOs, serializadores, routers y errores
+frontend/                       Interfaz React + Tailwind CSS para toda la API
 tests/unit/                     Dominio, estrategias, controladores y sesiones
 tests/integration/              API con persistencia falsa y MongoDB real
-scripts/                        Seed y generación de OpenAPI
+scripts/                        Seed, listener, reconciliación y OpenAPI
 docs/                           Arquitectura y decisiones
 ```
 
@@ -61,32 +66,71 @@ El dominio no importa FastAPI ni PyMongo.
 - **Facade**: `ControladorCompras` mantiene una interfaz estable.
 - **MVC**: separación estricta entre modelo, controlador y vista.
 
-## MongoDB por almacén
+## MongoDB, replica set y base integrada
 
 Un único `MongoClient` con pool atiende todas las bases:
 
 ```text
-MongoClient
-├── warehouse_1.productos
-├── warehouse_2.productos
-└── warehouse_3.productos
+MongoDB (replica set rs0)
+├── warehouse_1.productos      fuente de verdad
+├── warehouse_2.productos      fuente de verdad
+├── warehouse_3.productos      fuente de verdad
+├── comparador
+│   ├── productos              read model integrado
+│   └── sync_state             resume token y estado del listener
+└── seguridad
+    ├── roles                  catálogo y permisos por rol
+    └── usuarios               clientes y proveedores activos
 ```
 
-El prefijo es configurable con `MONGODB_DB_PREFIX`. El número y los nombres de
-almacenes se pueden cambiar con `WAREHOUSES=1:Centro,2:Norte`.
+El prefijo de los almacenes es configurable con `MONGODB_DB_PREFIX`. El número
+y los nombres se pueden cambiar con `WAREHOUSES=1:Centro,2:Norte`. La base
+integrada se configura con `MONGODB_COMPARADOR_DB` y no puede coincidir con la
+base de un almacén. Los roles y usuarios viven en `MONGODB_SEGURIDAD_DB`
+(`seguridad` por defecto); al arrancar, la API sincroniza la colección `roles`
+desde la matriz canónica de `models/permisos.py` sin borrar usuarios.
 
-Cada documento guarda `_id = producto_id`, los datos del producto y campos
-normalizados (`nombre_normalizado`, `marca_normalizada`) con índices auxiliares
-para búsquedas. La estructura principal en memoria sigue siendo la lista
-enlazada; los índices son una optimización.
+Cada documento de almacén guarda `_id = producto_id`, los datos del producto y
+campos normalizados (`nombre_normalizado`, `marca_normalizada`) con índices.
+La proyección `comparador.productos` usa un `_id` compuesto
+`"{almacen_id}_{producto_id}"`, guarda `precio_final` e incluye índices por
+nombre y precio.
 
-Las escrituras persisten primero en MongoDB y después actualizan la caché en
-memoria. Al arrancar se carga cada inventario una sola vez. Un administrador
-puede forzar la recarga con `POST /api/v1/sessions/{token}/admin/reload`.
+### Sincronización
 
-> **Importante:** las sesiones y la caché viven en memoria. Ejecuta **un solo
-> worker** de Uvicorn. Para escalar horizontalmente habría que compartir
-> sesiones y caché (por ejemplo con Redis).
+El servicio `listener` ejecuta `scripts/run_listener.py` y mantiene
+`comparador` al día:
+
+1. Si no existe `resume_token`, reconstruye la proyección completa.
+2. Abre un Change Stream sobre las colecciones `productos` de los almacenes.
+3. Aplica `insert`, `update`, `replace` y `delete` de forma idempotente.
+4. Guarda el `resume_token` en `comparador.sync_state`.
+5. Ante `ChangeStreamHistoryLost` (código 286), reconstruye y reabre el stream.
+6. Reintenta con backoff si se pierde la conexión.
+
+La consistencia es **eventual**: una escritura del administrador se refleja en
+`comparador` en cuanto el listener procesa el cambio. No se hace una
+proyección síncrona en la API.
+
+### Sin caché del catálogo
+
+La API **no carga el catálogo completo en memoria**. Las consultas se resuelven
+en MongoDB:
+
+| Consulta | Fuente |
+| --- | --- |
+| `GET /warehouses/{id}/products` | `warehouse_X`, paginado |
+| `mejor_precio` | `comparador`, agregación por almacén |
+| `catalogo` | `comparador`, paginado |
+| `global` | `comparador`, el más barato entre almacenes |
+| Carrito por `producto_id` | `warehouse_X` |
+
+Las listas enlazadas se mantienen para la lista de compras, el carrito y los
+resultados acotados de una consulta. Las sesiones siguen en memoria, por lo que
+se recomienda **un solo worker** de Uvicorn. Un administrador puede
+reconstruir `comparador` con
+`POST /api/v1/sessions/{token}/admin/comparador/reconciliar` o con
+`POST /api/v1/sessions/{token}/admin/reload`.
 
 ## Inicio rápido con Docker
 
@@ -97,25 +141,42 @@ puede forzar la recarga con `POST /api/v1/sessions/{token}/admin/reload`.
    # Cambia ADMIN_CLAVE por una clave de al menos 8 caracteres
    ```
 
-2. Levanta MongoDB y carga los datos de ejemplo **antes** de arrancar la API
-   (la caché se llena al iniciar):
+2. Levanta MongoDB como replica set e inicialízalo:
 
    ```bash
-   docker compose up -d mongodb
+   docker compose up -d mongodb mongo-init
+   ```
+
+   `mongo-init` anuncia `mongodb:27017` como miembro del replica set. Si el
+   volumen `mongo_data` se creó antes con otro hostname (por ejemplo
+   `localhost:27017`), lo reconfigura automáticamente; el host se puede cambiar
+   con `MONGO_REPLICA_HOST`.
+
+3. Carga los datos de ejemplo (opcional):
+
+   ```bash
    docker compose --profile tools run --rm seed
    ```
 
-3. Levanta la API:
+4. Levanta el listener y la API:
 
    ```bash
-   docker compose up -d --build app
+   docker compose up -d --build listener app
    curl http://localhost:8000/api/v1/health
    ```
 
-4. Abre `http://localhost:8000/docs`.
+   El listener reanuda desde `comparador.sync_state`; si no hay
+   `resume_token`, reconstruye la proyección y luego escucha cambios.
+   Si el seed se ejecutó antes, la reconciliación inicial ya incluye esos
+   productos; si se ejecuta después, los Change Streams los incorporan.
 
-Si la API ya estaba arrancada cuando ejecutaste el seed, recarga la caché con
-`POST /api/v1/sessions/{token}/admin/reload` o reinicia el contenedor `app`.
+5. Abre `http://localhost:8000/docs`.
+
+Para forzar una reconstrucción manual:
+
+```bash
+docker compose exec listener python scripts/reconciliar_comparador.py
+```
 
 Para detener los servicios:
 
@@ -125,7 +186,7 @@ docker compose down
 
 ## Desarrollo local
 
-Requisitos: Python 3.10+ y MongoDB 7 (o el contenedor de MongoDB).
+Requisitos: Python 3.10+ y MongoDB 7 configurado como replica set.
 
 ```bash
 python -m venv .venv
@@ -138,8 +199,12 @@ set -a
 source .env
 set +a
 
-docker compose up -d mongodb
+# MongoDB en replica set (el compose ya lo configura)
+docker compose up -d mongodb mongo-init
 python scripts/seed_mongodb.py
+
+# En dos terminales:
+python scripts/run_listener.py
 uvicorn main:app --reload
 ```
 
@@ -151,13 +216,66 @@ También se puede ejecutar directamente:
 python main.py
 ```
 
+## Interfaz web (React + Tailwind CSS)
+
+La carpeta [`frontend/`](frontend/) contiene una SPA que consume **todos los
+endpoints** de la API: salud, almacenes, sesiones, lista de compras, búsqueda,
+carrito, administración y exportaciones CSV.
+
+Requisitos: Node.js 20 o superior.
+
+```bash
+# Terminal 1: backend en http://localhost:8000
+set -a
+source .env
+set +a
+uvicorn main:app --reload
+
+# Terminal 2: interfaz en http://localhost:3000
+cd frontend
+npm install
+npm run dev
+```
+
+Abre `http://localhost:3000`. La URL de la API se puede cambiar desde el panel
+izquierdo; si omites la ruta se añade `/api/v1` automáticamente. También se
+puede fijar en tiempo de compilación copiando `frontend/.env.example` a
+`frontend/.env` y ajustando `VITE_API_URL`. El token de la sesión se guarda en
+`localStorage` y se envía como `Authorization: Bearer <token>`.
+
+Características de la interfaz:
+
+- Dashboard con los tres endpoints de salud y el resumen de almacenes.
+- Inventarios paginados con `limit`, `offset` y `X-Total-Count`.
+- Creación de sesiones de cliente y administrador, consulta de estado y cierre.
+- Lista de compras con alta, baja y exportación CSV.
+- Búsqueda en los modos `mejor_precio`, `catalogo` y `global`.
+- Carrito con alta de ítems, eliminación por índice, vaciado y descuentos.
+- Administración de productos, precios, bajas, importación CSV y comparador.
+- Descarga de la lista y del carrito en CSV.
+
+Para compilar la versión de producción:
+
+```bash
+cd frontend
+npm run build
+```
+
+CORS ya permite `http://localhost:3000` y `http://localhost:5173` con el
+`.env.example` incluido. Si usas otro puerto, añade el origen a
+`CORS_ORIGINS` y reinicia la API. También existen los atajos `make
+frontend-install`, `make frontend-dev` y `make frontend-build`.
+
 ## Variables de entorno
 
 | Variable | Obligatoria | Defecto | Descripción |
 | --- | --- | --- | --- |
-| `MONGODB_URI` | Sí | — | URI de MongoDB, por ejemplo `mongodb://127.0.0.1:27017/`. |
+| `MONGODB_URI` | Sí | — | URI de MongoDB. En Docker: `mongodb://mongodb:27017/?replicaSet=rs0`. Desde el host: `mongodb://127.0.0.1:27017/?directConnection=true`. |
 | `ADMIN_CLAVE` | Sí | — | Clave administrativa. Mínimo 8 caracteres. No existe valor por defecto. |
 | `MONGODB_DB_PREFIX` | No | `warehouse` | Prefijo de bases: `warehouse_1`, `warehouse_2`, ... |
+| `MONGODB_COMPARADOR_DB` | No | `comparador` | Base integrada de solo lectura mantenida por el listener. |
+| `MONGODB_SEGURIDAD_DB` | No | `seguridad` | Base de roles y usuarios persistidos. No puede coincidir con la del comparador ni con la de un almacén. |
+| `MONGO_REPLICA_HOST` | No | `mongodb:27017` | Host que anuncia `mongo-init` como miembro de `rs0` en Docker. |
 | `WAREHOUSES` | No | `1,2,3` | Almacenes con formato `1:Centro,2:Norte`. |
 | `MONGODB_TIMEOUT_MS` | No | `5000` | Timeout de selección/conexión de MongoDB. |
 | `CORS_ORIGINS` | No | `http://localhost:3000` | Orígenes separados por comas. |
@@ -189,6 +307,40 @@ curl -s -X POST http://localhost:8000/api/v1/sessions/admin \
   -d "{\"clave\":\"$ADMIN_CLAVE\"}"
 ```
 
+### Roles y proveedores
+
+Los roles se persisten en MongoDB y cada sesión recibe la lista efectiva de
+permisos. La matriz canónica es:
+
+| Rol | Alcance |
+| --- | --- |
+| `INVITADO` | Solo `ver_menu`. |
+| `CLIENTE` | Lista, carrito, búsqueda/comparación, descuentos y exportación. |
+| `PROVEEDOR` | Inventario del almacén asignado: altas, bajas, precios e importación CSV. |
+| `ADMIN` | Todos los almacenes, usuarios, comparador y funciones de comprador para soporte. |
+
+Un administrador crea el proveedor y le asigna un almacén:
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/sessions/$ADMIN_TOKEN/users/providers \
+  -H 'Content-Type: application/json' \
+  -d '{"nombre":"Distribuidora Norte","almacen_id":1}'
+```
+
+Después, el proveedor inicia sesión solo con su nombre:
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/sessions/provider \
+  -H 'Content-Type: application/json' \
+  -d '{"nombre":"Distribuidora Norte"}'
+```
+
+El catálogo público de roles y permisos está en `GET /api/v1/roles` y
+`GET /api/v1/roles/{rol}`. La gestión de usuarios requiere `ADMIN` y se expone
+bajo `/api/v1/sessions/{token}/users`. Si una operación no está permitida, la
+API responde `403` con `detalles.permiso` y `detalles.rol`; la interfaz muestra
+un aviso "Acción no permitida".
+
 ### Endpoints principales
 
 | Método | Ruta | Descripción |
@@ -197,11 +349,17 @@ curl -s -X POST http://localhost:8000/api/v1/sessions/admin \
 | `GET` | `/api/v1/health/live` | Liveness sin consultar MongoDB. |
 | `GET` | `/api/v1/health/ready` | Readiness con ping a MongoDB. |
 | `GET` | `/api/v1/warehouses` | Almacenes y cantidad de productos. |
-| `GET` | `/api/v1/warehouses/{id}/products` | Inventario de un almacén. |
+| `GET` | `/api/v1/warehouses/{id}/products` | Inventario paginado (`limit`, `offset`, `X-Total-Count`). |
 | `POST` | `/api/v1/sessions/user` | Crea sesión de cliente. |
+| `POST` | `/api/v1/sessions/provider` | Crea sesión de proveedor por nombre. |
 | `POST` | `/api/v1/sessions/admin` | Crea sesión de administrador. |
-| `GET` | `/api/v1/sessions/{token}` | Estado, lista y carrito. |
+| `GET` | `/api/v1/sessions/{token}` | Estado, rol, permisos, lista y carrito. |
 | `DELETE` | `/api/v1/sessions/{token}` | Cierra la sesión. |
+| `GET` | `/api/v1/roles` | Catálogo de roles, permisos y descripciones. |
+| `GET` | `/api/v1/roles/{rol}` | Detalle de un rol. |
+| `GET` | `/api/v1/sessions/{token}/users` | Lista usuarios persistidos (`ADMIN`). |
+| `POST` | `/api/v1/sessions/{token}/users/providers` | Crea un proveedor con almacén (`ADMIN`). |
+| `PATCH` | `/api/v1/sessions/{token}/users/{usuario_id}` | Cambia rol, almacén o estado (`ADMIN`). |
 | `GET` | `/api/v1/sessions/{token}/shopping-list` | Lista de compras. |
 | `POST` | `/api/v1/sessions/{token}/shopping-list` | Agrega un producto. |
 | `DELETE` | `/api/v1/sessions/{token}/shopping-list/{nombre}` | Elimina un producto. |
@@ -213,8 +371,11 @@ curl -s -X POST http://localhost:8000/api/v1/sessions/admin \
 | `POST` | `/api/v1/sessions/{token}/cart/discount` | Aplica `sin`, `porcentaje` o `fijo`. |
 | `POST` | `/api/v1/sessions/{token}/admin/warehouses/{id}/products` | Alta de producto. |
 | `PATCH` | `/api/v1/sessions/{token}/admin/warehouses/{id}/products` | Edita precio por `producto_id`. |
+| `DELETE` | `/api/v1/sessions/{token}/admin/warehouses/{id}/products/{producto_id}` | Elimina un producto. |
 | `POST` | `/api/v1/sessions/{token}/admin/csv` | Importa inventario CSV. |
-| `POST` | `/api/v1/sessions/{token}/admin/reload` | Recarga inventarios desde MongoDB. |
+| `GET` | `/api/v1/sessions/{token}/admin/comparador/status` | Estado de la proyección integrada. |
+| `POST` | `/api/v1/sessions/{token}/admin/comparador/reconciliar` | Reconstruye `comparador` desde los almacenes. |
+| `POST` | `/api/v1/sessions/{token}/admin/reload` | Alias de compatibilidad para reconciliar `comparador`. |
 | `GET` | `/api/v1/sessions/{token}/export/shopping-list` | Exporta la lista en CSV. |
 | `GET` | `/api/v1/sessions/{token}/export/cart` | Exporta el carrito en CSV. |
 
@@ -243,9 +404,10 @@ almacen,nombre,marca,categoria,tipo,precio,extra
 # Toda la suite (MongoDB se omite si no hay MONGODB_URI)
 python -m unittest discover -s tests -t .
 
-# Con MongoDB real (Docker local)
-docker compose up -d mongodb
-MONGODB_URI=mongodb://127.0.0.1:27017/ ADMIN_CLAVE=test-admin-key \
+# Con MongoDB real en replica set (Docker local)
+docker compose up -d mongodb mongo-init
+MONGODB_URI='mongodb://127.0.0.1:27017/?directConnection=true' \
+  ADMIN_CLAVE=test-admin-key \
   python -m unittest discover -s tests -t . -v
 
 # Lint y formato
@@ -258,18 +420,36 @@ python scripts/exportar_openapi.py
 
 La suite de API usa `PersistenciaFalsa`, por lo que no necesita MongoDB. Las
 pruebas de `tests/integration/test_mongodb.py` se ejecutan contra MongoDB real
-y comprueban aislamiento entre almacenes, índices y upsert idempotente.
+y comprueban aislamiento entre almacenes, índices, paginación, eliminación,
+reconstrucción de `comparador` y propagación de cambios con Change Streams.
+Si MongoDB no está en replica set, la prueba de Change Streams se omite.
 
 ## Seguridad y operación
 
 - `ADMIN_CLAVE` es obligatoria y no tiene valor por defecto.
 - No se registran claves ni tokens completos.
 - Las sesiones expiran por inactividad y tienen un límite máximo.
+- MongoDB debe ser un **replica set** para que funcionen los Change Streams.
+- El listener debe ejecutarse como **una sola instancia**; los eventos son
+  idempotentes y el `resume_token` permite reanudar tras un reinicio.
+- `comparador` es reconstruible desde `warehouse_*`; no es la única copia.
 - Los errores HTTP usan códigos coherentes (`400`, `401`, `403`, `404`, `409`,
   `422`, `503`) y un cuerpo JSON con `error`, `codigo` y, si aplica,
   `detalles`.
 - Cada respuesta incluye `X-Request-ID`; se puede enviar uno propio.
 - El contenedor se ejecuta con usuario no root y healthcheck de readiness.
+
+### Problemas frecuentes
+
+- **`ServerSelectionTimeoutError` y el replica set anuncia `localhost:27017`**:
+  el volumen se inicializó dentro del contenedor con otro hostname. Ejecuta
+  `docker compose up -d mongo-init` para reconfigurarlo a `mongodb:27017` o
+  ajusta `MONGO_REPLICA_HOST`.
+- **`ChangeStreamHistoryLost` (código 286)**: el listener reconstruye
+  `comparador` automáticamente; también se puede forzar con
+  `POST /admin/comparador/reconciliar`.
+- **Producto no visible tras un alta**: la consistencia es eventual; revisa
+  `GET /admin/comparador/status` y los logs del servicio `listener`.
 
 ## Documentación adicional
 

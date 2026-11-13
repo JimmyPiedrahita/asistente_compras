@@ -1,9 +1,16 @@
-"""Almacenes, inventarios e índice auxiliar de búsqueda."""
+"""Almacenes, inventarios e índice auxiliar de búsqueda.
+
+``Almacen`` conserva una lista enlazada para los casos en los que se trabaja
+sin persistencia (pruebas y uso embebido). La API no carga el catálogo
+completo: ``GestorAlmacenes`` delega en el repositorio cuando está disponible y
+solo usa memoria como fallback para pruebas.
+"""
 
 from __future__ import annotations
 
 import threading
 from collections.abc import Iterable, Iterator
+from typing import Any
 
 from core.config import AlmacenConfig
 from core.errors import Conflicto
@@ -14,11 +21,10 @@ from .texto import normalizar_texto
 
 
 class Almacen:
-    """Almacén con inventario en una lista simplemente enlazada.
+    """Almacén con inventario opcional en una lista simplemente enlazada.
 
-    El inventario sigue siendo la estructura principal. Los diccionarios
-    ``_por_nombre`` y ``_por_id`` son índices auxiliares para evitar búsquedas
-    lineales en cada comparación.
+    Los diccionarios ``_por_nombre`` y ``_por_id`` son índices auxiliares para
+    evitar búsquedas lineales en cada comparación.
     """
 
     def __init__(self, id_almacen: int, nombre: str) -> None:
@@ -40,6 +46,24 @@ class Almacen:
 
     # Alias de compatibilidad con el código anterior.
     agregar = agregar_producto
+
+    def eliminar_producto(self, producto_id: str) -> bool:
+        objetivo = self._por_id.get(str(producto_id))
+        if objetivo is None:
+            return False
+        restantes = [
+            producto
+            for producto in self.inventario.mostrar()
+            if producto.producto_id != objetivo.producto_id
+        ]
+        self.inventario.limpiar()
+        self._por_nombre.clear()
+        self._por_id.clear()
+        self._indice_tamano = 0
+        for producto in restantes:
+            self.inventario.agregar(producto)
+            self._indexar(producto)
+        return True
 
     def cargar(self, productos: Iterable[Producto]) -> None:
         """Reemplaza el inventario completo con los productos indicados."""
@@ -97,7 +121,12 @@ class Almacen:
 
 
 class GestorAlmacenes:
-    """Gestiona la colección de almacenes y coordina la persistencia."""
+    """Coordina almacenes y delega en la persistencia cuando existe.
+
+    Sin persistencia funciona íntegramente en memoria, lo que mantiene las
+    pruebas de dominio y los usos embebidos. Con persistencia no se carga el
+    catálogo: los listados y búsquedas se resuelven con consultas indexadas.
+    """
 
     def __init__(
         self,
@@ -110,13 +139,20 @@ class GestorAlmacenes:
         self.candado = threading.RLock()
 
         if almacenes is None:
-            almacenes = (Almacen(1, "Almacen 1"), Almacen(2, "Almacen 2"), Almacen(3, "Almacen 3"))
+            almacenes = (
+                Almacen(1, "Almacen 1"),
+                Almacen(2, "Almacen 2"),
+                Almacen(3, "Almacen 3"),
+            )
 
         for item in almacenes:
             if isinstance(item, Almacen):
                 self.agregar_almacen(item)
             else:
                 self.agregar_almacen(Almacen(item.id, item.nombre))
+
+    def _delegar(self, metodo: str) -> bool:
+        return self.persistencia is not None and callable(getattr(self.persistencia, metodo, None))
 
     def agregar_almacen(self, almacen: Almacen) -> None:
         with self.candado:
@@ -142,15 +178,179 @@ class GestorAlmacenes:
             almacen = self.obtener_almacen(id_almacen)
             if almacen is None:
                 return False
+            if self._delegar("insertar"):
+                self.persistencia.insertar(id_almacen, producto)  # type: ignore[attr-defined]
+                return True
             if almacen.tiene_producto_id(producto.producto_id):
                 raise Conflicto(f"El producto {producto.producto_id} ya existe en el almacén")
-            if self.persistencia is not None:
-                self.persistencia.insertar(id_almacen, producto)  # type: ignore[attr-defined]
             almacen.agregar_producto(producto)
             return True
 
+    def actualizar_producto(self, id_almacen: int, producto: Producto) -> bool:
+        with self.candado:
+            if self.obtener_almacen(id_almacen) is None:
+                return False
+            if self._delegar("actualizar"):
+                self.persistencia.actualizar(id_almacen, producto)  # type: ignore[attr-defined]
+            return True
+
+    def eliminar_producto(self, id_almacen: int, producto_id: str) -> bool:
+        with self.candado:
+            almacen = self.obtener_almacen(id_almacen)
+            if almacen is None:
+                return False
+            if self._delegar("eliminar"):
+                self.persistencia.eliminar(id_almacen, producto_id)  # type: ignore[attr-defined]
+                return True
+            return almacen.eliminar_producto(producto_id)
+
+    def obtener_producto(self, id_almacen: int, producto_id: str) -> Producto | None:
+        with self.candado:
+            almacen = self.obtener_almacen(id_almacen)
+            if almacen is None:
+                return None
+            if self._delegar("obtener_producto"):
+                return self.persistencia.obtener_producto(id_almacen, producto_id)  # type: ignore[attr-defined]
+            return almacen.producto_por_id(producto_id)
+
+    def producto_en_indice(self, id_almacen: int, indice: int) -> Producto | None:
+        with self.candado:
+            almacen = self.obtener_almacen(id_almacen)
+            if almacen is None:
+                return None
+            if self._delegar("producto_en_indice"):
+                return self.persistencia.producto_en_indice(id_almacen, indice)  # type: ignore[attr-defined]
+            try:
+                return almacen.inventario.obtener(indice)
+            except IndexError:
+                return None
+
+    def listar_productos(
+        self, id_almacen: int, limit: int = 100, offset: int = 0
+    ) -> tuple[list[Producto], int]:
+        with self.candado:
+            almacen = self.obtener_almacen(id_almacen)
+            if almacen is None:
+                return [], 0
+            if self._delegar("listar_productos"):
+                return self.persistencia.listar_productos(  # type: ignore[attr-defined]
+                    id_almacen, limit, offset
+                )
+            productos = list(almacen.inventario.mostrar())
+            return productos[offset : offset + limit], len(productos)
+
+    def contar_productos(self, id_almacen: int) -> int:
+        with self.candado:
+            almacen = self.obtener_almacen(id_almacen)
+            if almacen is None:
+                return 0
+            if self._delegar("contar"):
+                return int(self.persistencia.contar(id_almacen))  # type: ignore[attr-defined]
+            return len(almacen)
+
+    def existe_nombre_marca(self, id_almacen: int, nombre: str, marca: str | None = None) -> bool:
+        with self.candado:
+            almacen = self.obtener_almacen(id_almacen)
+            if almacen is None:
+                return False
+            if self._delegar("existe_nombre_marca"):
+                return bool(  # type: ignore[attr-defined]
+                    self.persistencia.existe_nombre_marca(id_almacen, nombre, marca)
+                )
+            return almacen.existe_nombre_marca(nombre, marca)
+
+    # Búsquedas ---------------------------------------------------------
+
+    def buscar_mejor_precio(self, nombres: Iterable[str]) -> dict[Almacen, ListaSimple]:
+        nombres = list(nombres)
+        if self._delegar("buscar_mejor_precio"):
+            return self.persistencia.buscar_mejor_precio(nombres)  # type: ignore[attr-defined]
+        resultado: dict[Almacen, ListaSimple] = {}
+        for almacen in self.almacenes:
+            for nombre in nombres:
+                mejor = self._mejor(almacen, nombre)
+                if mejor is None:
+                    continue
+                resultado.setdefault(almacen, ListaSimple()).agregar(mejor)
+        return resultado
+
+    def buscar_catalogo(
+        self, nombres: Iterable[str], limit: int = 100, offset: int = 0
+    ) -> dict[Almacen, ListaSimple]:
+        nombres = list(nombres)
+        if self._delegar("buscar_catalogo"):
+            return self.persistencia.buscar_catalogo(  # type: ignore[attr-defined]
+                nombres, limit, offset
+            )
+        encontrados: list[tuple[Almacen, Producto]] = []
+        for almacen in self.almacenes:
+            for nombre in nombres:
+                for producto in almacen.productos_por_nombre(nombre):
+                    encontrados.append((almacen, producto))
+        resultado: dict[Almacen, ListaSimple] = {}
+        for almacen, producto in encontrados[offset : offset + limit]:
+            resultado.setdefault(almacen, ListaSimple()).agregar(producto)
+        return resultado
+
+    def buscar_global(self, nombres: Iterable[str]) -> list[dict[str, Any]]:
+        nombres = list(nombres)
+        if self._delegar("buscar_global"):
+            return self.persistencia.buscar_global(nombres)  # type: ignore[attr-defined]
+        resultado: list[dict[str, Any]] = []
+        for nombre in nombres:
+            mejor: Producto | None = None
+            mejor_almacen: Almacen | None = None
+            for almacen in self.almacenes:
+                for producto in almacen.productos_por_nombre(nombre):
+                    if (
+                        mejor is None
+                        or producto.obtener_precio_final() < mejor.obtener_precio_final()
+                    ):
+                        mejor = producto
+                        mejor_almacen = almacen
+            if mejor is not None and mejor_almacen is not None:
+                resultado.append(
+                    {
+                        "nombre": mejor.nombre,
+                        "producto": mejor,
+                        "almacen": mejor_almacen,
+                        "precio": mejor.obtener_precio_final(),
+                    }
+                )
+        return resultado
+
+    @staticmethod
+    def _mejor(almacen: Almacen, nombre: str) -> Producto | None:
+        mejor: Producto | None = None
+        for producto in almacen.productos_por_nombre(nombre):
+            if mejor is None or producto.obtener_precio_final() < mejor.obtener_precio_final():
+                mejor = producto
+        return mejor
+
+    # Administración ----------------------------------------------------
+
+    def estado_comparador(self) -> dict[str, Any]:
+        if self._delegar("estado_comparador"):
+            return self.persistencia.estado_comparador()  # type: ignore[attr-defined]
+        return {
+            "estado": "sin_persistencia",
+            "documentos": 0,
+            "ultima_sincronizacion": None,
+            "ultimo_evento": None,
+            "tiene_resume_token": False,
+        }
+
+    def reconciliar_comparador(self) -> dict[str, Any]:
+        if self._delegar("reconciliar_comparador"):
+            return self.persistencia.reconciliar_comparador()  # type: ignore[attr-defined]
+        return {"documentos": 0, "reconciliados": 0}
+
     def cargar_inventarios(self) -> None:
-        """Carga una sola vez todos los inventarios desde la persistencia."""
+        """Carga completa desde la persistencia.
+
+        Se mantiene por compatibilidad con pruebas y scripts. La API ya no la
+        usa para operar: el catálogo no se guarda en memoria.
+        """
         if self.persistencia is None:
             return
         with self.candado:
@@ -181,7 +381,7 @@ class GestorAlmacenes:
         return None
 
     def productos(self) -> Iterator[tuple[Almacen, Producto]]:
-        """Itera pares (almacén, producto) de todo el sistema."""
+        """Itera pares (almacén, producto) del inventario en memoria."""
         for almacen in self.almacenes:
             for producto in almacen.inventario.mostrar():
                 yield almacen, producto

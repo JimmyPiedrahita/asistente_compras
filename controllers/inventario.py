@@ -15,7 +15,13 @@ from core.errors import (
     SolicitudInvalida,
 )
 from core.results import Resultado
-from models.permisos import CARGAR_CSV, EDITAR_PRECIO, GESTIONAR_ALMACENES
+from models.permisos import (
+    EDITAR_PRECIO,
+    GESTIONAR_COMPARADOR,
+    GESTIONAR_INVENTARIO,
+    IMPORTAR_CSV,
+    PROVEEDOR,
+)
 from models.productos import FabricaProductos, Producto
 from models.texto import normalizar_texto
 
@@ -37,14 +43,14 @@ class ControladorInventario:
         tipo: str = "normal",
         **extra: Any,
     ) -> Resultado:
-        if not self.contexto.autorizar(GESTIONAR_ALMACENES):
+        if not self.contexto.autorizar_almacen(id_almacen, GESTIONAR_INVENTARIO):
             return Resultado.DENEGADO
         try:
             producto = FabricaProductos.crear_producto(
                 tipo, nombre, precio, marca=marca, categoria=categoria, **extra
             )
         except (ValueError, TypeError) as error:
-            self.contexto.registrar("ADMIN", "Producto rechazado", str(error))
+            self.contexto.registrar(self.contexto.sesion.rol, "Producto rechazado", str(error))
             return Resultado.INVALIDO
 
         try:
@@ -57,36 +63,29 @@ class ControladorInventario:
             return Resultado.NO_ENCONTRADO
 
         self.contexto.registrar(
-            "ADMIN", "Producto en inventario", f"{producto} -> Almacen {id_almacen}"
+            self.contexto.sesion.rol,
+            "Producto en inventario",
+            f"{producto} -> Almacen {id_almacen}",
         )
         return Resultado.OK
 
     def editar_precio(self, id_almacen: int, indice: int, nuevo_precio: float) -> Resultado:
-        if not self.contexto.autorizar(EDITAR_PRECIO):
+        if not self.contexto.autorizar_almacen(id_almacen, EDITAR_PRECIO):
             return Resultado.DENEGADO
-        with self.contexto.gestor_almacenes.candado:
-            almacen = self.contexto.gestor_almacenes.obtener_almacen(id_almacen)
-            if almacen is None:
-                return Resultado.NO_ENCONTRADO
-            try:
-                producto = almacen.inventario.obtener(indice)
-            except IndexError:
-                return Resultado.NO_ENCONTRADO
-            return self._aplicar_precio(id_almacen, producto, nuevo_precio)
+        producto = self.contexto.gestor_almacenes.producto_en_indice(id_almacen, indice)
+        if producto is None:
+            return Resultado.NO_ENCONTRADO
+        return self._aplicar_precio(id_almacen, producto, nuevo_precio)
 
     def editar_precio_por_id(
         self, id_almacen: int, producto_id: str, nuevo_precio: float
     ) -> Resultado:
-        if not self.contexto.autorizar(EDITAR_PRECIO):
+        if not self.contexto.autorizar_almacen(id_almacen, EDITAR_PRECIO):
             return Resultado.DENEGADO
-        with self.contexto.gestor_almacenes.candado:
-            almacen = self.contexto.gestor_almacenes.obtener_almacen(id_almacen)
-            if almacen is None:
-                return Resultado.NO_ENCONTRADO
-            producto = almacen.producto_por_id(producto_id)
-            if producto is None:
-                return Resultado.NO_ENCONTRADO
-            return self._aplicar_precio(id_almacen, producto, nuevo_precio)
+        producto = self.contexto.gestor_almacenes.obtener_producto(id_almacen, producto_id)
+        if producto is None:
+            return Resultado.NO_ENCONTRADO
+        return self._aplicar_precio(id_almacen, producto, nuevo_precio)
 
     def _aplicar_precio(
         self, id_almacen: int, producto: Producto, nuevo_precio: float
@@ -100,26 +99,26 @@ class ControladorInventario:
 
         anterior = producto.precio
         producto.precio = precio
-        if self.contexto.gestor_almacenes.persistencia is not None:
-            try:
-                self.contexto.gestor_almacenes.persistencia.actualizar(  # type: ignore[attr-defined]
-                    id_almacen, producto
-                )
-            except NoEncontrado:
-                producto.precio = anterior
-                return Resultado.NO_ENCONTRADO
-            except ServicioNoDisponible:
-                producto.precio = anterior
-                raise
-            except Exception:
-                producto.precio = anterior
-                self.contexto.registrar(
-                    "ERROR", "Precio no actualizado", "No se pudo persistir en MongoDB"
-                )
-                return Resultado.ERROR
+        try:
+            actualizado = self.contexto.gestor_almacenes.actualizar_producto(id_almacen, producto)
+        except NoEncontrado:
+            producto.precio = anterior
+            return Resultado.NO_ENCONTRADO
+        except ServicioNoDisponible:
+            producto.precio = anterior
+            raise
+        except Exception:
+            producto.precio = anterior
+            self.contexto.registrar(
+                "ERROR", "Precio no actualizado", "No se pudo persistir en MongoDB"
+            )
+            return Resultado.ERROR
+        if not actualizado:
+            producto.precio = anterior
+            return Resultado.NO_ENCONTRADO
 
         self.contexto.registrar(
-            "ADMIN",
+            self.contexto.sesion.rol,
             "Precio actualizado",
             f"{producto.nombre}: ${anterior:.2f} -> ${precio:.2f}",
         )
@@ -148,8 +147,8 @@ class ControladorInventario:
             return {"importados": 0, "rechazados": 0, "errores": [error.mensaje]}
 
     def cargar_csv_contenido(self, contenido: str) -> dict[str, Any]:
-        if not self.contexto.autorizar(CARGAR_CSV):
-            raise NoPermitido(CARGAR_CSV)
+        if not self.contexto.autorizar(IMPORTAR_CSV):
+            raise self.contexto.error_permiso(IMPORTAR_CSV)
         if not isinstance(contenido, str) or not contenido.strip():
             raise SolicitudInvalida("El CSV está vacío")
         if len(contenido.encode("utf-8")) > self.max_csv_bytes:
@@ -175,6 +174,14 @@ class ControladorInventario:
                     if clave is not None
                 }
                 id_almacen = int(datos.get("almacen", ""))
+                if (
+                    self.contexto.sesion.rol == PROVEEDOR
+                    and id_almacen != self.contexto.sesion.almacen_id
+                ):
+                    raise ValueError(
+                        f"permiso denegado para el almacén {id_almacen}; "
+                        f"tu almacén es {self.contexto.sesion.almacen_id}"
+                    )
                 nombre = datos.get("nombre", "")
                 precio = float(datos.get("precio", ""))
                 marca = datos.get("marca") or "Generica"
@@ -200,7 +207,9 @@ class ControladorInventario:
                     normalizar_texto(nombre),
                     normalizar_texto(marca),
                 )
-                if clave in claves_vistas or almacen.existe_nombre_marca(nombre, marca):
+                if clave in claves_vistas or self.contexto.gestor_almacenes.existe_nombre_marca(
+                    id_almacen, nombre, marca
+                ):
                     raise ValueError("producto duplicado en el almacén")
 
                 if not self.contexto.gestor_almacenes.agregar_producto(id_almacen, producto):
@@ -212,24 +221,55 @@ class ControladorInventario:
                 resultado["errores"].append(f"Línea {numero}: {error}")
 
         self.contexto.registrar(
-            "ADMIN",
+            self.contexto.sesion.rol,
             "Carga CSV finalizada",
             f"{resultado['importados']} importados, {resultado['rechazados']} rechazados",
         )
         return resultado
 
-    def listar_productos(self, id_almacen: int) -> list[Producto]:
-        with self.contexto.gestor_almacenes.candado:
-            almacen = self.contexto.gestor_almacenes.obtener_almacen(id_almacen)
-            if almacen is None:
-                raise NoEncontrado(f"Almacén no encontrado: {id_almacen}")
-            return list(almacen.inventario.mostrar())
+    def listar_productos(
+        self, id_almacen: int, limit: int = 100, offset: int = 0
+    ) -> list[Producto]:
+        productos, _ = self.listar_productos_paginados(id_almacen, limit, offset)
+        return productos
+
+    def listar_productos_paginados(
+        self, id_almacen: int, limit: int = 100, offset: int = 0
+    ) -> tuple[list[Producto], int]:
+        almacen = self.contexto.gestor_almacenes.obtener_almacen(id_almacen)
+        if almacen is None:
+            raise NoEncontrado(f"Almacén no encontrado: {id_almacen}")
+        return self.contexto.gestor_almacenes.listar_productos(id_almacen, limit, offset)
+
+    def eliminar_producto(self, id_almacen: int, producto_id: str) -> Resultado:
+        if not self.contexto.autorizar_almacen(id_almacen, GESTIONAR_INVENTARIO):
+            return Resultado.DENEGADO
+        try:
+            eliminado = self.contexto.gestor_almacenes.eliminar_producto(id_almacen, producto_id)
+        except NoEncontrado:
+            return Resultado.NO_ENCONTRADO
+        if not eliminado:
+            return Resultado.NO_ENCONTRADO
+        self.contexto.registrar(
+            self.contexto.sesion.rol, "Producto eliminado", f"{producto_id} -> Almacen {id_almacen}"
+        )
+        return Resultado.OK
+
+    def estado_comparador(self) -> dict[str, Any]:
+        if not self.contexto.autorizar(GESTIONAR_COMPARADOR):
+            raise self.contexto.error_permiso(GESTIONAR_COMPARADOR)
+        return self.contexto.gestor_almacenes.estado_comparador()
 
     def recargar_inventarios(self) -> Resultado:
-        if not self.contexto.autorizar(GESTIONAR_ALMACENES):
+        """Reconstruye la proyección integrada desde las bases fuente."""
+        if not self.contexto.autorizar(GESTIONAR_COMPARADOR):
             return Resultado.DENEGADO
-        self.contexto.gestor_almacenes.cargar_inventarios()
-        self.contexto.registrar("ADMIN", "Inventarios recargados desde MongoDB")
+        resultado = self.contexto.gestor_almacenes.reconciliar_comparador()
+        self.contexto.registrar(
+            self.contexto.sesion.rol,
+            "Comparador reconstruido desde MongoDB",
+            f"{resultado.get('reconciliados', 0)} productos",
+        )
         return Resultado.OK
 
 

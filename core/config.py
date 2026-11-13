@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from .errors import ConfiguracionInvalida
 
 _PREFIJO_VALIDO = re.compile(r"^[A-Za-z0-9_-]+$")
+_NOMBRE_BASE_VALIDO = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,8 @@ class Settings:
     mongodb_uri: str
     admin_clave: str
     mongodb_db_prefix: str = "warehouse"
+    mongodb_comparador_db: str = "comparador"
+    mongodb_seguridad_db: str = "seguridad"
     mongodb_timeout_ms: int = 5000
     cors_origins: tuple[str, ...] = ("http://localhost:3000",)
     session_ttl_seconds: int = 3600
@@ -113,10 +116,30 @@ class Settings:
             raise ConfiguracionInvalida(
                 "MONGODB_DB_PREFIX solo admite letras, números, guion y guion bajo"
             )
+        if not _NOMBRE_BASE_VALIDO.match(self.mongodb_comparador_db):
+            raise ConfiguracionInvalida(
+                "MONGODB_COMPARADOR_DB solo admite letras, números, guion y guion bajo"
+            )
+        if not _NOMBRE_BASE_VALIDO.match(self.mongodb_seguridad_db):
+            raise ConfiguracionInvalida(
+                "MONGODB_SEGURIDAD_DB solo admite letras, números, guion y guion bajo"
+            )
+        if self.mongodb_seguridad_db == self.mongodb_comparador_db:
+            raise ConfiguracionInvalida(
+                "MONGODB_SEGURIDAD_DB no puede coincidir con MONGODB_COMPARADOR_DB"
+            )
         if self.almacenes is None:
             object.__setattr__(self, "almacenes", crear_almacenes(self.mongodb_db_prefix))
         if not self.almacenes:
             raise ConfiguracionInvalida("Debe configurarse al menos un almacén")
+        if any(almacen.base_datos == self.mongodb_comparador_db for almacen in self.almacenes):
+            raise ConfiguracionInvalida(
+                "MONGODB_COMPARADOR_DB no puede coincidir con la base de un almacén"
+            )
+        if any(almacen.base_datos == self.mongodb_seguridad_db for almacen in self.almacenes):
+            raise ConfiguracionInvalida(
+                "MONGODB_SEGURIDAD_DB no puede coincidir con la base de un almacén"
+            )
         ids = [almacen.id for almacen in self.almacenes]
         if len(set(ids)) != len(ids):
             raise ConfiguracionInvalida("Los ids de almacén no pueden repetirse")
@@ -149,6 +172,8 @@ class Settings:
             )
 
         prefijo = env.get("MONGODB_DB_PREFIX", "warehouse").strip() or "warehouse"
+        comparador = env.get("MONGODB_COMPARADOR_DB", "comparador").strip() or "comparador"
+        seguridad = env.get("MONGODB_SEGURIDAD_DB", "seguridad").strip() or "seguridad"
         origenes = tuple(
             origen.strip()
             for origen in env.get("CORS_ORIGINS", "http://localhost:3000").split(",")
@@ -159,6 +184,8 @@ class Settings:
             mongodb_uri=uri,
             admin_clave=admin_clave,
             mongodb_db_prefix=prefijo,
+            mongodb_comparador_db=comparador,
+            mongodb_seguridad_db=seguridad,
             mongodb_timeout_ms=_leer_int(env, "MONGODB_TIMEOUT_MS", 5000, minimo=100),
             cors_origins=origenes,
             session_ttl_seconds=_leer_int(env, "SESSION_TTL_SECONDS", 3600),

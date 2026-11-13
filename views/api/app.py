@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from controllers.sesiones import RegistroSesiones
 from core.config import Settings
 from core.logging import configurar_logging, obtener_logger
-from infrastructure.mongodb import MongoInventarioRepository
+from infrastructure.mongodb import MongoInventarioRepository, MongoSeguridadRepository
 from models.almacenes import GestorAlmacenes
+from models.seguridad import SeguridadEnMemoria
 
 from .errors import registrar_manejadores
 from .routers import ROUTERS
@@ -21,6 +22,7 @@ from .routers import ROUTERS
 logger = obtener_logger("asistente_compras.api")
 
 RepositoryFactory = Callable[[Settings], object]
+SecurityFactory = Callable[[Settings], object]
 
 
 def _crear_repositorio(settings: Settings, repository_factory: RepositoryFactory | None):
@@ -29,6 +31,25 @@ def _crear_repositorio(settings: Settings, repository_factory: RepositoryFactory
     return MongoInventarioRepository(
         settings.mongodb_uri,
         settings.almacenes,
+        comparador_db=settings.mongodb_comparador_db,
+        timeout_ms=settings.mongodb_timeout_ms,
+    )
+
+
+def _crear_seguridad(
+    settings: Settings,
+    security_factory: SecurityFactory | None,
+    repository_factory: RepositoryFactory | None,
+):
+    if security_factory is not None:
+        return security_factory(settings)
+    if repository_factory is not None:
+        # Las pruebas inyectan una persistencia falsa de inventario; la
+        # seguridad en memoria evita depender de un MongoDB real.
+        return SeguridadEnMemoria()
+    return MongoSeguridadRepository(
+        settings.mongodb_uri,
+        base_datos=settings.mongodb_seguridad_db,
         timeout_ms=settings.mongodb_timeout_ms,
     )
 
@@ -37,6 +58,7 @@ def create_app(
     settings: Settings | str | None = None,
     repository_factory: RepositoryFactory | None = None,
     *,
+    security_factory: SecurityFactory | None = None,
     mongo_uri: str | None = None,
 ) -> FastAPI:
     """Crea la API. MongoDB es obligatorio en ejecución real.
@@ -53,10 +75,12 @@ def create_app(
     configurar_logging(settings.log_level)
     repositorio = _crear_repositorio(settings, repository_factory)
     gestor = GestorAlmacenes(repositorio, settings.almacenes)
-    gestor.cargar_inventarios()
+    seguridad = _crear_seguridad(settings, security_factory, repository_factory)
+    seguridad.inicializar()  # type: ignore[attr-defined]
     sesiones = RegistroSesiones(
         gestor,
         admin_clave=settings.admin_clave,
+        seguridad=seguridad,
         ttl_seconds=settings.session_ttl_seconds,
         max_sesiones=settings.max_sessions,
         max_csv_bytes=settings.max_csv_bytes,
@@ -76,19 +100,25 @@ def create_app(
                 repositorio.close()  # type: ignore[attr-defined]
             except Exception:  # pragma: no cover - cierre defensivo
                 logger.exception("No se pudo cerrar la conexión con MongoDB")
+            try:
+                seguridad.close()  # type: ignore[attr-defined]
+            except Exception:  # pragma: no cover - cierre defensivo
+                logger.exception("No se pudo cerrar la conexión de seguridad")
 
     app = FastAPI(
         title="Asistente de Compras API",
-        version="3.0.0",
+        version="3.1.0",
         description=(
             "API REST MVC del asistente de compras multi-almacén. "
-            "Cada almacén usa una base de datos MongoDB independiente."
+            "Cada almacén usa una base MongoDB independiente y la base "
+            "``comparador`` integra los productos mediante Change Streams."
         ),
         lifespan=lifespan,
         openapi_tags=[
             {"name": "Salud", "description": "Disponibilidad de la API y MongoDB."},
             {"name": "Almacenes", "description": "Almacenes e inventarios."},
-            {"name": "Sesiones", "description": "Sesiones de cliente y administrador."},
+            {"name": "Seguridad", "description": "Roles, permisos y usuarios."},
+            {"name": "Sesiones", "description": "Sesiones de cliente, proveedor y administrador."},
             {"name": "Lista de compras", "description": "Lista personal del cliente."},
             {"name": "Búsqueda", "description": "Comparación entre almacenes."},
             {"name": "Carrito", "description": "Carrito y descuentos."},
@@ -98,6 +128,7 @@ def create_app(
     )
     app.state.repositorio = repositorio
     app.state.gestor = gestor
+    app.state.seguridad = seguridad
     app.state.sesiones = sesiones
 
     origenes = list(settings.cors_origins)
@@ -107,7 +138,13 @@ def create_app(
         allow_credentials="*" not in origenes,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
+        expose_headers=[
+            "X-Request-ID",
+            "X-Total-Count",
+            "X-Limit",
+            "X-Offset",
+            "Content-Disposition",
+        ],
     )
 
     @app.middleware("http")

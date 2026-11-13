@@ -45,10 +45,15 @@ class SesionCreada(ModeloBase):
     session_id: str
     usuario: str
     rol: str
+    permisos: list[str] = Field(default_factory=list)
+    almacen_id: int | None = None
+    usuario_id: str | None = None
 
 
 class BusquedaSolicitud(ModeloBase):
     modo: ModoBusqueda = "mejor_precio"
+    limit: int = Field(default=100, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
 
     @field_validator("modo", mode="before")
     @classmethod
@@ -93,6 +98,10 @@ class ResumenCarrito(ModeloBase):
 class EstadoSesion(ModeloBase):
     usuario: str | None
     rol: str
+    descripcion_rol: str = ""
+    permisos: list[str] = Field(default_factory=list)
+    almacen_id: int | None = None
+    usuario_id: str | None = None
     lista: list[str]
     carrito: ResumenCarrito
 

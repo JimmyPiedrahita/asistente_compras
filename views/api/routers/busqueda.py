@@ -22,7 +22,7 @@ def buscar(
     datos: BusquedaSolicitud,
     controlador: ControladorCompras = Depends(obtener_controlador),
 ):
-    resultado = controlador.busqueda.ejecutar(datos.modo)
+    resultado = controlador.busqueda.ejecutar(datos.modo, limit=datos.limit, offset=datos.offset)
     return {
         "modo": datos.modo,
         "resultados": resultado_busqueda_json(resultado),
