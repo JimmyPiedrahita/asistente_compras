@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { api, errorText, getApiBase, saveApiBase } from "../api";
+import { api, errorText } from "../api";
 
 const SESSION_KEY = "asistente_compras_session";
 const AppContext = createContext(null);
@@ -55,7 +55,6 @@ function loadSession() {
 export function AppProvider({ children }) {
   const [session, setSession] = useState(loadSession);
   const [toasts, setToasts] = useState([]);
-  const [apiBase, setApiBaseState] = useState(getApiBase);
   const timers = useRef(new Map());
   const refreshingSession = useRef(false);
 
@@ -179,16 +178,6 @@ export function AppProvider({ children }) {
     [notify, notifyError, saveSession, session],
   );
 
-  const changeApiBase = useCallback(
-    (value) => {
-      const normalized = saveApiBase(value);
-      setApiBaseState(normalized);
-      notify(`API configurada en ${normalized}`, "success", "Configuración");
-      return normalized;
-    },
-    [notify],
-  );
-
   const value = useMemo(
     () => ({
       session,
@@ -204,14 +193,9 @@ export function AppProvider({ children }) {
       notify,
       notifyError,
       dismissToast,
-      apiBase,
-      changeApiBase,
-      docs: `${apiBase.replace(/\/api(\/v1)?$/, "")}/docs`,
     }),
     [
-      apiBase,
       can,
-      changeApiBase,
       closeSession,
       dismissToast,
       notify,

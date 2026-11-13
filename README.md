@@ -138,7 +138,8 @@ reconstruir `comparador` con
 
    ```bash
    cp .env.example .env
-   # Cambia ADMIN_CLAVE por una clave de al menos 8 caracteres
+   # Cambia ADMIN_CLAVE, MONGO_ROOT_PASSWORD, MONGO_APP_PASSWORD
+   # y MONGO_DEMO_PASSWORD. No uses los valores de ejemplo en producción.
    ```
 
 2. Levanta MongoDB como replica set e inicialízalo:
@@ -147,10 +148,11 @@ reconstruir `comparador` con
    docker compose up -d mongodb mongo-init
    ```
 
-   `mongo-init` anuncia `mongodb:27017` como miembro del replica set. Si el
-   volumen `mongo_data` se creó antes con otro hostname (por ejemplo
-   `localhost:27017`), lo reconfigura automáticamente; el host se puede cambiar
-   con `MONGO_REPLICA_HOST`.
+   `mongo-init` crea el keyfile, inicia el replica set, crea el usuario `root`
+   y los roles/usuarios nativos de MongoDB. Anuncia `mongodb:27017` como
+   miembro del replica set. Si el volumen `mongo_data` se creó antes con otro
+   hostname (por ejemplo `localhost:27017`), lo reconfigura automáticamente; el
+   host se puede cambiar con `MONGO_REPLICA_HOST`.
 
 3. Carga los datos de ejemplo (opcional):
 
@@ -194,12 +196,12 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 
 cp .env.example .env
-# Edita .env: al menos ADMIN_CLAVE
+# Edita .env: ADMIN_CLAVE y las contraseñas MONGO_*
 set -a
 source .env
 set +a
 
-# MongoDB en replica set (el compose ya lo configura)
+# MongoDB en replica set con autenticación (el compose ya lo configura)
 docker compose up -d mongodb mongo-init
 python scripts/seed_mongodb.py
 
@@ -270,8 +272,13 @@ frontend-install`, `make frontend-dev` y `make frontend-build`.
 
 | Variable | Obligatoria | Defecto | Descripción |
 | --- | --- | --- | --- |
-| `MONGODB_URI` | Sí | — | URI de MongoDB. En Docker: `mongodb://mongodb:27017/?replicaSet=rs0`. Desde el host: `mongodb://127.0.0.1:27017/?directConnection=true`. |
-| `ADMIN_CLAVE` | Sí | — | Clave administrativa. Mínimo 8 caracteres. No existe valor por defecto. |
+| `MONGODB_URI` | Sí | — | URI de MongoDB. En Docker se construye con `MONGO_APP_USER`/`MONGO_APP_PASSWORD` y `authSource=admin`. Desde el host: `mongodb://app_asistente:...@127.0.0.1:27017/?directConnection=true&authSource=admin`. |
+| `ADMIN_CLAVE` | Sí | — | Clave administrativa de la aplicación. Mínimo 8 caracteres. No existe valor por defecto. |
+| `MONGO_ROOT_USER` | No | `root` | Usuario root de MongoDB creado por `mongo-init`. |
+| `MONGO_ROOT_PASSWORD` | Sí | — | Contraseña de root de MongoDB. Obligatoria para habilitar `--auth`. |
+| `MONGO_APP_USER` | No | `app_asistente` | Usuario de servicio de la API y del listener. |
+| `MONGO_APP_PASSWORD` | Sí | — | Contraseña del usuario de servicio. |
+| `MONGO_DEMO_PASSWORD` | No | `DemoPass2026` | Contraseña de `u_cliente`, `u_proveedor`, `u_gerente` y `u_admin`. |
 | `MONGODB_DB_PREFIX` | No | `warehouse` | Prefijo de bases: `warehouse_1`, `warehouse_2`, ... |
 | `MONGODB_COMPARADOR_DB` | No | `comparador` | Base integrada de solo lectura mantenida por el listener. |
 | `MONGODB_SEGURIDAD_DB` | No | `seguridad` | Base de roles y usuarios persistidos. No puede coincidir con la del comparador ni con la de un almacén. |
@@ -340,6 +347,76 @@ El catálogo público de roles y permisos está en `GET /api/v1/roles` y
 bajo `/api/v1/sessions/{token}/users`. Si una operación no está permitida, la
 API responde `403` con `detalles.permiso` y `detalles.rol`; la interfaz muestra
 un aviso "Acción no permitida".
+
+### RBAC nativo de MongoDB
+
+El proyecto tiene **dos capas de seguridad** que no deben confundirse:
+
+| Capa | Dónde se define | Qué controla |
+| --- | --- | --- |
+| Aplicación | `models/permisos.py` y la base `seguridad` | Los roles `INVITADO`, `CLIENTE`, `PROVEEDOR` y `ADMIN` dentro de la API y la interfaz. |
+| MongoDB | `admin.system.roles` y `admin.system.users` | Qué puede hacer cada credencial al conectarse con `mongosh`, Compass o un driver. |
+
+Al levantar Docker, el servicio `mongo-keyfile` genera el keyfile del replica
+set y `mongo-init` crea el usuario `root` y los roles/usuarios nativos. MongoDB
+arranca con `--auth`, así que **ya no se puede entrar sin credenciales**.
+
+Roles nativos creados por `infrastructure/mongodb/init/10_seguridad.js`:
+
+| Rol de MongoDB | Alcance |
+| --- | --- |
+| `rol_cliente` | Solo lectura de `warehouse_*` y `comparador`. |
+| `rol_proveedor` | Lectura/escritura únicamente de `warehouse_1` y lectura de `comparador`. |
+| `rol_gerente` | Hereda `rol_cliente` y `rol_proveedor`, y además escribe el resto de almacenes. |
+| `rol_administrador` | Lectura/escritura de todos los almacenes, `comparador` y `seguridad`. |
+
+Usuarios de demostración (todos con `MONGO_DEMO_PASSWORD`):
+
+```text
+u_cliente    -> rol_cliente
+u_proveedor  -> rol_proveedor
+u_gerente    -> rol_gerente
+u_admin      -> rol_administrador
+app_asistente -> rol_administrador (usuario de servicio de la API)
+```
+
+Para entrar al contenedor:
+
+```bash
+docker exec -it asistente_compras_mongodb mongosh \
+  -u root -p "$MONGO_ROOT_PASSWORD" --authenticationDatabase admin
+```
+
+Y para probar las restricciones desde el host:
+
+```bash
+# Permitido: u_proveedor escribe warehouse_1.
+mongosh "mongodb://u_proveedor:$MONGO_DEMO_PASSWORD@127.0.0.1:27017/?authSource=admin&directConnection=true" \
+  --eval 'db.getSiblingDB("warehouse_1").getCollection("__demo").insertOne({ok:1})'
+
+# Denegado: u_proveedor no puede escribir warehouse_2.
+mongosh "mongodb://u_proveedor:$MONGO_DEMO_PASSWORD@127.0.0.1:27017/?authSource=admin&directConnection=true" \
+  --eval 'db.getSiblingDB("warehouse_2").getCollection("__demo").insertOne({ok:1})'
+```
+
+En Compass usa la misma URI con `authSource=admin` y `directConnection=true`.
+El usuario `u_cliente` puede leer el catálogo, pero no escribir; `u_gerente`
+hereda los permisos de proveedor y puede escribir todos los almacenes.
+
+> La API usa un único usuario de servicio (`app_asistente`). Los roles
+> `CLIENTE`/`PROVEEDOR` de la aplicación se aplican en el código y no cambian
+> la credencial de MongoDB. Los usuarios de `mongosh`/Compass son para
+> administrar y demostrar el RBAC del servidor. El usuario de servicio tiene
+> `readAnyDatabase` porque el listener abre un Change Stream de todo el
+> cluster (`allChangesForCluster: true`).
+
+Si se borra el volumen `mongo_keyfile`, MongoDB no podrá autenticar el replica
+set; hay que recrearlo junto con `mongo_data`. Para reiniciar desde cero:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
 
 ### Endpoints principales
 
@@ -427,6 +504,10 @@ Si MongoDB no está en replica set, la prueba de Change Streams se omite.
 ## Seguridad y operación
 
 - `ADMIN_CLAVE` es obligatoria y no tiene valor por defecto.
+- MongoDB arranca con `--auth` y keyfile de replica set. Las credenciales de
+  `mongosh`/Compass son independientes de los usuarios de la aplicación.
+- `mongo_data` y `mongo_keyfile` deben conservarse juntos; el keyfile no se
+  versiona y se genera en un volumen la primera vez.
 - No se registran claves ni tokens completos.
 - Las sesiones expiran por inactividad y tienen un límite máximo.
 - MongoDB debe ser un **replica set** para que funcionen los Change Streams.
@@ -441,6 +522,16 @@ Si MongoDB no está en replica set, la prueba de Change Streams se omite.
 
 ### Problemas frecuentes
 
+- **`Authentication failed` al arrancar**: revisa que `MONGO_ROOT_PASSWORD`,
+  `MONGO_APP_PASSWORD` y `MONGODB_URI` usen la misma contraseña. Si cambiaste
+  `MONGO_ROOT_PASSWORD` después del primer arranque, cámbiala también en
+  MongoDB con `db.changeUserPassword(...)` o recrea los volúmenes.
+- **`not authorized ... allChangesForCluster` en el listener**: el usuario de
+  servicio necesita `readAnyDatabase`; `mongo-init` lo concede al crear
+  `app_asistente`.
+- **`Read security file failed`**: el keyfile no es legible por el usuario
+  `mongodb` (uid 999). El servicio `mongo-keyfile` lo corrige; si persiste,
+  revisa los permisos del volumen `mongo_keyfile`.
 - **`ServerSelectionTimeoutError` y el replica set anuncia `localhost:27017`**:
   el volumen se inicializó dentro del contenedor con otro hostname. Ejecuta
   `docker compose up -d mongo-init` para reconfigurarlo a `mongodb:27017` o

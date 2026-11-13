@@ -1,12 +1,46 @@
 services:
+  # Genera el keyfile del replica set una sola vez y lo guarda en un volumen.
+  # Con --auth, MongoDB exige keyfile para la autenticación interna del RS.
+  mongo-keyfile:
+    image: mongo:7.0
+    container_name: asistente_compras_mongo_keyfile
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -e
+        if [ ! -s /keys/mongo-keyfile ]; then
+          openssl rand -base64 756 > /keys/mongo-keyfile
+          echo "Keyfile generado"
+        else
+          echo "Keyfile existente"
+        fi
+        chown 999:999 /keys/mongo-keyfile
+        chmod 400 /keys/mongo-keyfile
+    volumes:
+      - mongo_keyfile:/keys
+    restart: "no"
+
   mongodb:
     image: mongo:7.0
     container_name: asistente_compras_mongodb
+    depends_on:
+      mongo-keyfile:
+        condition: service_completed_successfully
+    command:
+      [
+        "mongod",
+        "--bind_ip_all",
+        "--replSet",
+        "rs0",
+        "--keyFile",
+        "/etc/mongo/mongo-keyfile",
+        "--auth",
+      ]
     ports:
-      - "27017:27017"
-    command: ["mongod", "--bind_ip_all", "--replSet", "rs0"]
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
+      - mongo_keyfile:/etc/mongo
     restart: unless-stopped
     healthcheck:
       test:
@@ -18,47 +52,39 @@ services:
       timeout: 5s
       retries: 20
 
+  # Inicializa el replica set, crea root y luego los roles/usuarios nativos.
+  # Comparte la red de mongodb para usar la excepción de localhost en el
+  # primer arranque (crear el primer usuario).
   mongo-init:
     image: mongo:7.0
     container_name: asistente_compras_mongo_init
+    network_mode: "service:mongodb"
     depends_on:
       mongodb:
         condition: service_healthy
-    entrypoint: ["mongosh", "--host", "mongodb:27017", "--quiet", "--eval"]
+    environment:
+      MONGO_ROOT_USER: ${MONGO_ROOT_USER:-root}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}
+      MONGO_APP_USER: ${MONGO_APP_USER:-app_asistente}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}
+      MONGO_DEMO_PASSWORD: ${MONGO_DEMO_PASSWORD:-DemoPass2026}
+      MONGO_REPLICA_HOST: ${MONGO_REPLICA_HOST:-mongodb:27017}
+      MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
+      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
+      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
+      WAREHOUSES: ${WAREHOUSES:-}
+    volumes:
+      - ./infrastructure/mongodb/init:/scripts:ro
+    entrypoint: ["bash", "-c"]
     command:
       - |
-        const anunciado = "${MONGO_REPLICA_HOST:-mongodb:27017}";
-        try {
-          rs.status();
-          print("Replica set rs0 ya inicializado");
-        } catch (error) {
-          print("Inicializando replica set rs0 con " + anunciado + "...");
-          rs.initiate({
-            _id: "rs0",
-            members: [{ _id: 0, host: anunciado }]
-          });
-        }
-        // Un volumen creado con otro hostname (por ejemplo localhost:27017)
-        // anuncia una dirección inalcanzable para los demás contenedores.
-        let configuracion = rs.conf();
-        const hosts = configuracion.members.map((miembro) => miembro.host);
-        if (hosts.length !== 1 || hosts[0] !== anunciado) {
-          print("Reconfigurando miembros " + JSON.stringify(hosts) + " -> " + anunciado);
-          configuracion.members = [{ _id: 0, host: anunciado }];
-          configuracion.version = (configuracion.version || 1) + 1;
-          rs.reconfig(configuracion, { force: true });
-        }
-        for (let intento = 0; intento < 60; intento++) {
-          try {
-            if (db.hello().isWritablePrimary) {
-              print("Primario listo en " + anunciado);
-              quit(0);
-            }
-          } catch (error) {}
-          sleep(500);
-        }
-        print("El replica set no alcanzó el estado primario");
-        quit(1);
+        set -e
+        until mongosh --quiet --host 127.0.0.1:27017 \
+          --eval 'db.adminCommand({ping: 1})' >/dev/null 2>&1; do
+          sleep 1
+        done
+        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/00_replica_y_root.js
+        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/10_seguridad.js
     restart: "no"
 
   app:
@@ -66,10 +92,11 @@ services:
       context: .
     container_name: asistente_compras_api
     environment:
-      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0
+      MONGODB_URI: mongodb://${MONGO_APP_USER:-app_asistente}:${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}@mongodb:27017/?replicaSet=rs0&authSource=admin
       ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
       MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
       MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
+      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
       WAREHOUSES: ${WAREHOUSES:-}
       MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
@@ -89,10 +116,11 @@ services:
       context: .
     container_name: asistente_compras_listener
     environment:
-      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0
+      MONGODB_URI: mongodb://${MONGO_APP_USER:-app_asistente}:${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}@mongodb:27017/?replicaSet=rs0&authSource=admin
       ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
       MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
       MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
+      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
       WAREHOUSES: ${WAREHOUSES:-}
       MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -110,10 +138,11 @@ services:
       context: .
     profiles: ["tools"]
     environment:
-      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0
+      MONGODB_URI: mongodb://${MONGO_APP_USER:-app_asistente}:${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}@mongodb:27017/?replicaSet=rs0&authSource=admin
       ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
       MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
       MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
+      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
       WAREHOUSES: ${WAREHOUSES:-}
       MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
     command: ["python", "scripts/seed_mongodb.py", "--archivo", "productos_ejemplo.csv"]
@@ -124,3 +153,4 @@ services:
 
 volumes:
   mongo_data:
+  mongo_keyfile:

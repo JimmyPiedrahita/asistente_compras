@@ -9,7 +9,6 @@ import {
   EmptyState,
   Field,
   Input,
-  JsonBlock,
   Money,
   NeedPermission,
   NeedSession,
@@ -53,12 +52,12 @@ export default function CartPage({ onNavigate }) {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Carrito</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Mi carrito</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Ítems, subtotal, descuento y total de la sesión.
+            Revisa los productos que has seleccionado.
           </p>
         </div>
-        <NeedSession onNavigate={onNavigate} />
+        <NeedSession />
       </div>
     );
   }
@@ -67,16 +66,15 @@ export default function CartPage({ onNavigate }) {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Carrito</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Mi carrito</h2>
           <p className="mt-1 text-sm text-slate-500">
-            El carrito pertenece al flujo de compra del cliente.
+            El carrito está disponible para cuentas de cliente.
           </p>
         </div>
         <NeedPermission
-          onNavigate={onNavigate}
           session={session}
           permission="agregar_producto"
-          title="Tu rol no usa carrito"
+          title="El carrito no está disponible para tu cuenta"
         />
       </div>
     );
@@ -149,11 +147,9 @@ export default function CartPage({ onNavigate }) {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Carrito</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Mi carrito</h2>
           <p className="mt-1 text-sm text-slate-500">
-            <span className="font-mono text-xs">
-              GET · POST · DELETE /sessions/{"{token}"}/cart
-            </span>
+            Revisa, aplica descuentos y exporta tu lista de compras.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -178,7 +174,7 @@ export default function CartPage({ onNavigate }) {
       <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
         <Card
           title="Ítems del carrito"
-          description={cart.data ? `${productos.length} producto(s)` : "GET /cart"}
+          description={cart.data ? `${productos.length} producto(s)` : "Cargando..."}
           bodyClassName="p-0 sm:p-0"
           actions={
             <Button size="sm" variant="secondary" icon="refresh" onClick={load} loading={cart.loading}>
@@ -244,7 +240,7 @@ export default function CartPage({ onNavigate }) {
               </ul>
               <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-400 sm:px-6">
                 <span className="inline-flex items-center gap-1.5">
-                  <Icon name="cart" size={13} /> DELETE /cart/items/{"{indice}"} usa el índice mostrado
+                  <Icon name="cart" size={13} /> Usa el botón quitar para eliminar un producto
                 </span>
                 <Badge tone="slate">{productos.length} ítems</Badge>
               </div>
@@ -253,7 +249,7 @@ export default function CartPage({ onNavigate }) {
         </Card>
 
         <div className="space-y-6">
-          <Card title="Resumen" description="Calculado por el backend.">
+          <Card title="Resumen">
             {cart.data ? (
               <div className="space-y-2.5 text-sm">
                 <div className="flex justify-between text-slate-500">
@@ -276,7 +272,7 @@ export default function CartPage({ onNavigate }) {
             )}
           </Card>
 
-          <Card title="Descuento" description="POST /cart/discount">
+          <Card title="Aplicar descuento">
             <form className="space-y-4" onSubmit={apply}>
               <Field label="Tipo">
                 <Select
@@ -315,8 +311,6 @@ export default function CartPage({ onNavigate }) {
           </Card>
         </div>
       </div>
-
-      <JsonBlock data={cart.data} label="GET /cart · respuesta" />
     </div>
   );
 }

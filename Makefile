@@ -3,7 +3,7 @@ PIP ?= .venv/bin/pip
 RUFF ?= .venv/bin/ruff
 NPM ?= npm
 
-.PHONY: install install-dev test lint format openapi seed listener reconcile docker-up docker-down docker-seed docker-reconcile frontend-install frontend-dev frontend-build
+.PHONY: install install-dev test lint format openapi seed listener reconcile docker-up docker-down docker-seed docker-reconcile rbac-test frontend-install frontend-dev frontend-build
 
 install:
 	$(PIP) install -r requirements.txt
@@ -45,6 +45,9 @@ docker-seed:
 
 docker-reconcile:
 	docker compose exec listener python scripts/reconciliar_comparador.py
+
+rbac-test:
+	bash scripts/verificar_rbac_mongodb.sh
 
 frontend-install:
 	cd frontend && $(NPM) install

@@ -212,9 +212,17 @@ el despliegue recomendado usa un único worker de Uvicorn.
 - TTL deslizante: cada acceso válido actualiza `ultimo_acceso`.
 - Límite máximo: al superar `MAX_SESSIONS` se expulsa la sesión menos usada.
 - El token se acepta en la ruta o en `Authorization: Bearer`.
-- Los roles son `INVITADO`, `CLIENTE` y `ADMIN`.
-- La matriz de permisos vive en `models/permisos.py`.
+- Los roles de la aplicación son `INVITADO`, `CLIENTE`, `PROVEEDOR` y `ADMIN`.
+- La matriz de permisos vive en `models/permisos.py` y se replica en
+  `seguridad.roles`; cada sesión conserva únicamente sus permisos efectivos.
 - `ADMIN_CLAVE` se compara con `secrets.compare_digest` y es obligatoria.
+- MongoDB arranca con `--auth` y keyfile de replica set. Los usuarios y roles
+  nativos (`rol_cliente`, `rol_proveedor`, `rol_gerente`, `rol_administrador`)
+  se crean en `infrastructure/mongodb/init/10_seguridad.js`. Son una capa
+  independiente de los roles de la API: controlan el acceso directo con
+  `mongosh`, Compass o un driver.
+- El usuario de servicio de la API y el listener necesita `readAnyDatabase`
+  para el Change Stream a nivel de cluster (`allChangesForCluster: true`).
 
 ## 8. Resultado de casos de uso
 
@@ -305,17 +313,24 @@ MONGODB_URI='mongodb://127.0.0.1:27017/?directConnection=true' \
 Orden de arranque:
 
 ```text
-mongodb (--replSet rs0)
-    -> mongo-init (rs.initiate o rs.reconfig al host anunciado)
+mongo-keyfile (genera el keyfile en un volumen)
+    -> mongodb (--replSet rs0 --auth --keyFile)
+    -> mongo-init (rs.initiate/reconfig, root, roles y usuarios nativos)
     -> seed (opcional)
     -> listener
     -> app
 ```
 
-`mongo-init` comprueba el host anunciado por el replica set y aplica
-`rs.reconfig({ force: true })` si el volumen existente apunta a otro hostname
-(por ejemplo `localhost:27017`, inalcanzable desde otros contenedores). El host
-se controla con `MONGO_REPLICA_HOST` y por defecto es `mongodb:27017`.
+`mongo-init` comparte la red de `mongodb` para usar la excepción de localhost
+del primer arranque. Crea el usuario `root`, autentica y luego ejecuta
+`10_seguridad.js`. También comprueba el host anunciado por el replica set y
+aplica `rs.reconfig({ force: true })` si el volumen existente apunta a otro
+hostname (por ejemplo `localhost:27017`, inalcanzable desde otros
+contenedores). El host se controla con `MONGO_REPLICA_HOST` y por defecto es
+`mongodb:27017`.
+
+Los volúmenes `mongo_data` y `mongo_keyfile` deben conservarse juntos. Si se
+borra solo el keyfile, el replica set no podrá autenticarse.
 
 En CI el replica set se arranca con `docker run --network host`, se inicia con
 `rs.initiate({ host: "127.0.0.1:27017" })` y las pruebas usan

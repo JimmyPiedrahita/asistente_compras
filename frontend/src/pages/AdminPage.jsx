@@ -9,10 +9,8 @@ import {
   EmptyState,
   Field,
   Input,
-  JsonBlock,
   NeedPermission,
   NeedSession,
-  Select,
   Spinner,
   Textarea,
 } from "../components/ui";
@@ -113,7 +111,7 @@ export default function AdminPage({ onNavigate }) {
             Inventarios, precios, CSV y comparador.
           </p>
         </div>
-        <NeedSession onNavigate={onNavigate} title="Necesitas una sesión de proveedor o administrador" />
+        <NeedSession title="Necesitas una sesión de proveedor o administrador" />
       </div>
     );
   }
@@ -128,7 +126,6 @@ export default function AdminPage({ onNavigate }) {
           </p>
         </div>
         <NeedPermission
-          onNavigate={onNavigate}
           session={session}
           permission="ver_inventario"
           title="Esta sección requiere un rol con inventario"
@@ -319,7 +316,7 @@ export default function AdminPage({ onNavigate }) {
           </Field>
           <div className="mb-1.5 flex items-center gap-2 text-xs text-slate-400">
             <Icon name="database" size={14} />
-            <span className="font-mono">warehouse_{selectedId || "?"}</span>
+            <span>Almacén seleccionado</span>
           </div>
         </div>
       </Card>
@@ -328,8 +325,7 @@ export default function AdminPage({ onNavigate }) {
         {puedeGestionar && (
         <Card
           title="Alta de producto"
-          description="POST /admin/warehouses/{id}/products"
-          actions={<Badge tone="slate">create</Badge>}
+          actions={<Badge tone="slate">Nuevo</Badge>}
         >
           <form className="grid gap-4 sm:grid-cols-2" onSubmit={create}>
             <Field label="Nombre" className="sm:col-span-2">
@@ -418,7 +414,7 @@ export default function AdminPage({ onNavigate }) {
 
         <div className="space-y-6">
           {puedePrecio && (
-          <Card title="Editar precio" description="PATCH /admin/warehouses/{id}/products">
+          <Card title="Editar precio">
             <form className="space-y-4" onSubmit={updatePrice}>
               <Field label="producto_id" hint="Identificador del producto en el almacén.">
                 <Input
@@ -447,7 +443,7 @@ export default function AdminPage({ onNavigate }) {
           )}
 
           {puedeGestionar && (
-          <Card title="Eliminar producto" description="DELETE /admin/warehouses/{id}/products/{producto_id}">
+          <Card title="Eliminar producto">
             <form className="space-y-4" onSubmit={deleteProduct}>
               <Field label="producto_id">
                 <Input
@@ -469,7 +465,7 @@ export default function AdminPage({ onNavigate }) {
       {puedeCsv && (
       <Card
         title="Importar inventario CSV"
-        description="POST /admin/csv · cabecera: almacen,nombre,marca,categoria,tipo,precio,extra"
+        description="Pega el contenido de un archivo CSV o selecciona uno."
         actions={
           <Button size="sm" variant="secondary" icon="file" onClick={loadExampleCsv}>
             Usar ejemplo
@@ -543,7 +539,6 @@ export default function AdminPage({ onNavigate }) {
                 Todas las filas fueron aceptadas.
               </Alert>
             )}
-            <JsonBlock data={csvResult} label="POST /admin/csv · respuesta" />
           </div>
         )}
       </Card>
@@ -551,8 +546,8 @@ export default function AdminPage({ onNavigate }) {
 
       {puedeComparador && (
       <Card
-        title="Comparador"
-        description="Estado de la proyección integrada y reconciliación."
+        title="Comparador de precios"
+        description="Estado de sincronización y herramientas de reconciliación."
         actions={
           <>
             <Button size="sm" variant="secondary" icon="refresh" onClick={loadComparador} loading={comparador.loading}>
@@ -610,13 +605,11 @@ export default function AdminPage({ onNavigate }) {
             <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
               <Icon name="database" size={15} className="mt-0.5 shrink-0 text-slate-400" />
               <p>
-                La sincronización es eventual. Tras crear o editar un producto, el listener
+                La sincronización es eventual. Tras crear o editar un producto, el sistema
                 actualiza el comparador. Si no aparece en búsquedas, usa{" "}
-                <span className="font-semibold">Reconciliar</span> o revisa el servicio{" "}
-                <span className="font-mono">listener</span>.
+                <span className="font-semibold">Reconciliar</span>.
               </p>
             </div>
-            <JsonBlock data={comparador.data} label="GET /admin/comparador/status · respuesta" />
           </div>
         ) : (
           <EmptyState icon="database" title="Sin datos del comparador" />

@@ -8,28 +8,6 @@ export function getApiBase() {
   return localStorage.getItem(STORAGE_KEY) || DEFAULT_API_BASE;
 }
 
-export function normalizeApiBase(raw) {
-  let value = String(raw || "").trim();
-  if (!value) return DEFAULT_API_BASE;
-  value = value.replace(/\/+$/, "");
-  if (!/^https?:\/\//i.test(value)) {
-    value = `http://${value}`;
-  }
-  if (!/\/(api\/v1|api)$/i.test(value)) {
-    value = `${value}/api/v1`;
-  }
-  return value;
-}
-
-export function saveApiBase(raw) {
-  const value = normalizeApiBase(raw);
-  localStorage.setItem(STORAGE_KEY, value);
-  return value;
-}
-
-export function docsUrl() {
-  return `${getApiBase().replace(/\/api(\/v1)?$/, "")}/docs`;
-}
 
 export class ApiError extends Error {
   constructor(message, status = 0, payload = null) {
@@ -293,70 +271,3 @@ export const api = {
     download(`/sessions/${encodeURIComponent(token)}/export/cart`, token, "carrito.csv"),
 };
 
-export const ENDPOINTS = [
-  { method: "GET", path: "/health", group: "Salud" },
-  { method: "GET", path: "/health/live", group: "Salud" },
-  { method: "GET", path: "/health/ready", group: "Salud" },
-  { method: "GET", path: "/warehouses", group: "Almacenes" },
-  { method: "GET", path: "/warehouses/{id}/products", group: "Almacenes" },
-  { method: "POST", path: "/sessions/user", group: "Sesiones" },
-  { method: "POST", path: "/sessions/provider", group: "Sesiones" },
-  { method: "POST", path: "/sessions/admin", group: "Sesiones" },
-  { method: "GET", path: "/sessions/{token}", group: "Sesiones" },
-  { method: "DELETE", path: "/sessions/{token}", group: "Sesiones" },
-  { method: "GET", path: "/roles", group: "Seguridad" },
-  { method: "GET", path: "/roles/{rol}", group: "Seguridad" },
-  { method: "GET", path: "/sessions/{token}/users", group: "Seguridad" },
-  { method: "POST", path: "/sessions/{token}/users/providers", group: "Seguridad" },
-  { method: "PATCH", path: "/sessions/{token}/users/{usuario_id}", group: "Seguridad" },
-  { method: "GET", path: "/sessions/{token}/shopping-list", group: "Lista" },
-  { method: "POST", path: "/sessions/{token}/shopping-list", group: "Lista" },
-  {
-    method: "DELETE",
-    path: "/sessions/{token}/shopping-list/{nombre}",
-    group: "Lista",
-  },
-  { method: "POST", path: "/sessions/{token}/search", group: "Búsqueda" },
-  { method: "GET", path: "/sessions/{token}/cart", group: "Carrito" },
-  { method: "POST", path: "/sessions/{token}/cart/items", group: "Carrito" },
-  {
-    method: "DELETE",
-    path: "/sessions/{token}/cart/items/{indice}",
-    group: "Carrito",
-  },
-  { method: "DELETE", path: "/sessions/{token}/cart", group: "Carrito" },
-  { method: "POST", path: "/sessions/{token}/cart/discount", group: "Carrito" },
-  {
-    method: "POST",
-    path: "/sessions/{token}/admin/warehouses/{id}/products",
-    group: "Administración",
-  },
-  {
-    method: "PATCH",
-    path: "/sessions/{token}/admin/warehouses/{id}/products",
-    group: "Administración",
-  },
-  {
-    method: "DELETE",
-    path: "/sessions/{token}/admin/warehouses/{id}/products/{producto_id}",
-    group: "Administración",
-  },
-  { method: "POST", path: "/sessions/{token}/admin/csv", group: "Administración" },
-  {
-    method: "GET",
-    path: "/sessions/{token}/admin/comparador/status",
-    group: "Administración",
-  },
-  {
-    method: "POST",
-    path: "/sessions/{token}/admin/comparador/reconciliar",
-    group: "Administración",
-  },
-  { method: "POST", path: "/sessions/{token}/admin/reload", group: "Administración" },
-  {
-    method: "GET",
-    path: "/sessions/{token}/export/shopping-list",
-    group: "Exportación",
-  },
-  { method: "GET", path: "/sessions/{token}/export/cart", group: "Exportación" },
-];

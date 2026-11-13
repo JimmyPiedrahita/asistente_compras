@@ -1,11 +1,8 @@
-import { useEffect, useState } from "react";
 import Icon from "./Icon";
 import { useApp } from "../context/AppContext";
 
-export const NAV_ITEMS = [
-  { id: "inicio", label: "Inicio", icon: "dashboard", description: "Salud y resumen" },
-  { id: "almacenes", label: "Almacenes", icon: "warehouse", description: "Inventarios" },
-  { id: "sesion", label: "Sesión", icon: "key", description: "Cliente, proveedor y admin" },
+const ALL_ITEMS = [
+  { id: "inicio", label: "Inicio", icon: "dashboard", description: "Tu panel principal" },
   {
     id: "roles",
     label: "Roles y permisos",
@@ -13,96 +10,41 @@ export const NAV_ITEMS = [
     description: "Qué puede hacer cada rol",
   },
   {
-    id: "lista",
-    label: "Lista de compras",
-    icon: "list",
-    description: "Lista personal",
-    permission: "crear_lista",
-  },
-  {
-    id: "busqueda",
-    label: "Búsqueda",
-    icon: "search",
-    description: "Comparar precios",
-    permission: "comparar",
+    id: "tienda",
+    label: "Tienda",
+    icon: "cart",
+    description: "Compra productos",
+    roles: ["CLIENTE", "ADMIN"],
   },
   {
     id: "carrito",
-    label: "Carrito",
+    label: "Mi carrito",
     icon: "cart",
     description: "Ítems y descuentos",
-    permission: "agregar_producto",
+    roles: ["CLIENTE", "ADMIN"],
+  },
+  {
+    id: "almacenes",
+    label: "Inventario",
+    icon: "warehouse",
+    description: "Productos disponibles",
+    roles: ["PROVEEDOR", "ADMIN"],
   },
   {
     id: "admin",
-    label: "Administración",
+    label: "Gestión",
     icon: "settings",
-    description: "Inventario del almacén",
-    permission: "gestionar_inventario",
-  },
-  {
-    id: "exportar",
-    label: "Exportar CSV",
-    icon: "download",
-    description: "Descargas",
-    permission: "exportar",
+    description: "Productos y precios",
+    roles: ["PROVEEDOR", "ADMIN"],
   },
 ];
 
-function ApiSettings() {
-  const { apiBase, changeApiBase, docs } = useApp();
-  const [draft, setDraft] = useState(apiBase);
-
-  useEffect(() => {
-    setDraft(apiBase);
-  }, [apiBase]);
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-slate-400">
-          API conectada
-        </p>
-        <a
-          href={docs}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 transition hover:text-slate-900"
-        >
-          Docs <Icon name="external" size={10} />
-        </a>
-      </div>
-      <form
-        className="mt-2 space-y-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          changeApiBase(draft);
-        }}
-      >
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          spellCheck={false}
-          aria-label="URL base de la API"
-          className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 font-mono text-[11px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-900/5"
-        />
-        <button
-          type="submit"
-          className="w-full rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-slate-800"
-        >
-          Guardar URL
-        </button>
-      </form>
-      <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
-        Si omites la ruta se añade <span className="font-mono">/api/v1</span>.
-      </p>
-    </div>
-  );
-}
+export const NAV_ITEMS = ALL_ITEMS;
 
 export function SidebarContent({ page, onNavigate, onClose }) {
-  const { can } = useApp();
-  const visibleItems = NAV_ITEMS.filter((item) => !item.permission || can(item.permission));
+  const { session } = useApp();
+  const rol = session?.rol;
+  const visibleItems = ALL_ITEMS.filter((item) => !item.roles || item.roles.includes(rol));
 
   return (
     <div className="flex h-full flex-col">
@@ -116,7 +58,7 @@ export function SidebarContent({ page, onNavigate, onClose }) {
               Asistente de Compras
             </p>
             <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
-              Consola API v1
+              {rol === "ADMIN" ? "Administración" : rol === "PROVEEDOR" ? "Proveedor" : "Cliente"}
             </p>
           </div>
         </div>
@@ -164,10 +106,9 @@ export function SidebarContent({ page, onNavigate, onClose }) {
         })}
       </nav>
 
-      <div className="space-y-3 border-t border-slate-200 p-4">
-        <ApiSettings />
+      <div className="border-t border-slate-200 p-4">
         <p className="px-1 text-[10px] leading-relaxed text-slate-400">
-          FastAPI + MongoDB · v3.1.0
+          Asistente de Compras · v3.1.0
         </p>
       </div>
     </div>

@@ -9,7 +9,6 @@ import {
   EmptyState,
   Field,
   Input,
-  JsonBlock,
   NeedPermission,
   NeedSession,
   Spinner,
@@ -44,13 +43,13 @@ export default function ShoppingListPage({ onNavigate }) {
       <div className="space-y-6">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Lista de compras
+            Mi lista de compras
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Productos pendientes del cliente en una lista sin duplicados.
+            Organiza los productos que necesitas comprar.
           </p>
         </div>
-        <NeedSession onNavigate={onNavigate} />
+        <NeedSession />
       </div>
     );
   }
@@ -60,17 +59,16 @@ export default function ShoppingListPage({ onNavigate }) {
       <div className="space-y-6">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Lista de compras
+            Mi lista de compras
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Solo el rol CLIENTE (y ADMIN) gestiona una lista personal.
+            La lista de compras está disponible para cuentas de cliente.
           </p>
         </div>
         <NeedPermission
-          onNavigate={onNavigate}
           session={session}
           permission="crear_lista"
-          title="Tu rol no tiene lista de compras"
+          title="La lista de compras no está disponible para tu cuenta"
         />
       </div>
     );
@@ -126,10 +124,10 @@ export default function ShoppingListPage({ onNavigate }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Lista de compras
+            Mi lista de compras
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            <span className="font-mono text-xs">GET · POST · DELETE /sessions/{"{token}"}/shopping-list</span>
+            Organiza los productos que necesitas comprar.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -196,9 +194,9 @@ export default function ShoppingListPage({ onNavigate }) {
         </Card>
 
         <div className="space-y-6">
-          <Card title="Agregar producto" description="POST /shopping-list">
+          <Card title="Agregar producto">
             <form className="space-y-4" onSubmit={add}>
-              <Field label="Nombre" hint="El backend rechaza duplicados con 409.">
+              <Field label="Nombre" hint="Si el producto ya existe en la lista, se ignorará.">
                 <Input
                   value={nombre}
                   onChange={(event) => setNombre(event.target.value)}
@@ -224,21 +222,10 @@ export default function ShoppingListPage({ onNavigate }) {
                 </span>
                 <Icon name="arrow" size={14} className="text-slate-400" />
               </button>
-              <button
-                onClick={() => onNavigate("exportar")}
-                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3.5 py-3 text-left text-sm transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                <span className="flex items-center gap-2 text-slate-600">
-                  <Icon name="download" size={15} className="text-slate-400" /> Todas las exportaciones
-                </span>
-                <Icon name="arrow" size={14} className="text-slate-400" />
-              </button>
             </div>
           </Card>
         </div>
       </div>
-
-      <JsonBlock data={{ lista: state.lista }} label="GET /shopping-list · respuesta" />
     </div>
   );
 }

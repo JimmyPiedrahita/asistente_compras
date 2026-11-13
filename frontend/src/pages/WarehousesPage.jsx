@@ -95,8 +95,7 @@ export default function WarehousesPage({ onNavigate }) {
             Almacenes e inventarios
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Consulta <span className="font-mono text-xs">GET /warehouses</span> y el catálogo
-            paginado de cada almacén.
+            Explora los almacenes disponibles y sus productos.
           </p>
         </div>
         <Button variant="secondary" icon="refresh" onClick={loadWarehouses} loading={warehouses.loading}>
@@ -146,7 +145,7 @@ export default function WarehousesPage({ onNavigate }) {
                       <p className="truncate text-sm font-semibold text-slate-800">
                         {warehouse.name}
                       </p>
-                      <p className="font-mono text-xs text-slate-400">id: {warehouse.id}</p>
+                      <p className="text-xs text-slate-400">Almacén {warehouse.id}</p>
                     </div>
                   </div>
                   <Badge tone={active ? "dark" : "slate"}>{warehouse.products}</Badge>
@@ -159,7 +158,7 @@ export default function WarehousesPage({ onNavigate }) {
             title={selectedWarehouse ? `Inventario · ${selectedWarehouse.name}` : "Inventario"}
             description={
               selectedWarehouse
-                ? `GET /warehouses/${selectedWarehouse.id}/products · página ${currentPage} de ${totalPages}`
+                ? `Página ${currentPage} de ${totalPages}`
                 : "Selecciona un almacén"
             }
             actions={
@@ -242,7 +241,7 @@ export default function WarehousesPage({ onNavigate }) {
                         <td className="px-5 py-3 sm:px-6">
                           <p className="font-medium text-slate-800">{product.nombre}</p>
                           <p className="text-xs text-slate-400">
-                            {product.marca} · <span className="font-mono">{product.producto_id}</span>
+                            {product.marca}
                           </p>
                         </td>
                         <td className="px-4 py-3 text-slate-600">{product.categoria}</td>

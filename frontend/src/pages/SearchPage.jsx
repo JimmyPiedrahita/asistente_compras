@@ -9,7 +9,6 @@ import {
   EmptyState,
   Field,
   Input,
-  JsonBlock,
   Money,
   NeedPermission,
   NeedSession,
@@ -81,13 +80,13 @@ export default function SearchPage({ onNavigate }) {
       <div className="space-y-6">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Búsqueda y comparación
+            Buscar productos
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Consulta precios con las estrategias del backend.
+            Encuentra y compara precios entre almacenes.
           </p>
         </div>
-        <NeedSession onNavigate={onNavigate} />
+        <NeedSession />
       </div>
     );
   }
@@ -97,17 +96,16 @@ export default function SearchPage({ onNavigate }) {
       <div className="space-y-6">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Búsqueda y comparación
+            Buscar productos
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Comparar precios es exclusivo de compradores.
+            Esta función está disponible para clientes.
           </p>
         </div>
         <NeedPermission
-          onNavigate={onNavigate}
           session={session}
           permission="comparar"
-          title="Tu rol no puede comparar precios"
+          title="Esta función no está disponible para tu cuenta"
         />
       </div>
     );
@@ -135,11 +133,10 @@ export default function SearchPage({ onNavigate }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Búsqueda y comparación
+            Buscar productos
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            <span className="font-mono text-xs">POST /sessions/{"{token}"}/search</span> con modo,
-            límite y offset.
+            Encuentra productos y compara precios entre almacenes.
           </p>
         </div>
         <Button size="sm" variant="secondary" icon="cart" onClick={() => onNavigate("carrito")}>
@@ -147,40 +144,19 @@ export default function SearchPage({ onNavigate }) {
         </Button>
       </div>
 
-      <Card title="Parámetros de búsqueda">
-        <form className="grid gap-4 lg:grid-cols-[1.5fr_0.5fr_0.5fr_auto] lg:items-end" onSubmit={runSearch}>
-          <Field label="Modo" hint={modeInfo?.hint}>
+      <Card title="Buscar">
+        <form className="grid gap-4 lg:grid-cols-[1.5fr_auto] lg:items-end" onSubmit={runSearch}>
+          <Field label="Estrategia de búsqueda" hint={modeInfo?.hint}>
             <Select
               value={form.modo}
               onChange={(event) => setForm({ ...form, modo: event.target.value, offset: 0 })}
             >
               {MODES.map((mode) => (
                 <option key={mode.value} value={mode.value}>
-                  {mode.label} · {mode.value}
+                  {mode.label}
                 </option>
               ))}
             </Select>
-          </Field>
-          <Field label="Límite">
-            <Input
-              type="number"
-              min={1}
-              max={500}
-              value={form.limit}
-              onChange={(event) =>
-                setForm({ ...form, limit: Math.min(500, Math.max(1, Number(event.target.value) || 1)) })
-              }
-            />
-          </Field>
-          <Field label="Offset">
-            <Input
-              type="number"
-              min={0}
-              value={form.offset}
-              onChange={(event) =>
-                setForm({ ...form, offset: Math.max(0, Number(event.target.value) || 0) })
-              }
-            />
           </Field>
           <Button type="submit" icon="search" loading={result.loading} className="lg:mb-[1px]">
             Buscar
@@ -295,8 +271,6 @@ export default function SearchPage({ onNavigate }) {
           </div>
         )}
       </Card>
-
-      <JsonBlock data={result.data} label="POST /search · respuesta" />
     </div>
   );
 }

@@ -23,6 +23,25 @@ const ROLE_TONES = {
   ADMIN: "dark",
 };
 
+const MONGO_ROLES = [
+  {
+    rol: "rol_cliente",
+    alcance: "Solo lectura de warehouse_* y comparador. No puede escribir.",
+  },
+  {
+    rol: "rol_proveedor",
+    alcance: "Lectura/escritura de warehouse_1 y lectura del comparador.",
+  },
+  {
+    rol: "rol_gerente",
+    alcance: "Hereda rol_cliente y rol_proveedor; escribe todos los almacenes.",
+  },
+  {
+    rol: "rol_administrador",
+    alcance: "Lectura/escritura de almacenes, comparador y seguridad.",
+  },
+];
+
 function RoleCard({ rol, descripciones }) {
   return (
     <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5">
@@ -293,6 +312,36 @@ export default function RolesPage({ onNavigate }) {
         </div>
       )}
 
+      <Card
+        title="Roles nativos de MongoDB"
+        description="admin.system.roles · creados por infrastructure/mongodb/init/10_seguridad.js"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {MONGO_ROLES.map((item) => (
+            <div
+              key={item.rol}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs font-semibold text-slate-800">
+                  {item.rol}
+                </span>
+                <Badge tone="slate">MongoDB</Badge>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                {item.alcance}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+          Esta capa controla el acceso con mongosh, Compass o un driver. Los
+          usuarios de demostración son u_cliente, u_proveedor, u_gerente y
+          u_admin (contraseña MONGO_DEMO_PASSWORD). Los roles de arriba son los
+          de la aplicación y se aplican en la API.
+        </p>
+      </Card>
+
       {!session ? (
         <Card title="Gestión de usuarios" description="Requiere una sesión ADMIN.">
           <EmptyState
@@ -300,7 +349,7 @@ export default function RolesPage({ onNavigate }) {
             title="Inicia sesión como administrador"
             description="El catálogo de roles es público, pero crear proveedores y cambiar usuarios requiere el permiso gestionar_usuarios."
             action={
-              <Button icon="key" onClick={() => onNavigate?.("sesion")}>
+              <Button icon="key" onClick={() => onNavigate?.("login")}>
                 Ir a sesiones
               </Button>
             }

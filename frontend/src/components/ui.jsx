@@ -240,80 +240,44 @@ export function CopyButton({ value, label = "Copiar" }) {
   );
 }
 
-export function JsonBlock({ data, label = "Respuesta JSON" }) {
-  if (data === undefined) return null;
-  return (
-    <details className="group mt-4 rounded-xl border border-slate-200 bg-slate-50">
-      <summary className="cursor-pointer select-none px-4 py-2.5 text-xs font-semibold text-slate-500 transition hover:text-slate-700">
-        {label}
-      </summary>
-      <pre className="scroll-thin max-h-64 overflow-auto border-t border-slate-200 p-4 font-mono text-[11px] leading-relaxed text-slate-700">
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    </details>
-  );
-}
-
-export function NeedSession({ onNavigate, title = "Necesitas una sesión activa" }) {
+export function NeedSession({ title = "Inicia sesión para continuar" }) {
   return (
     <Card>
       <EmptyState
         icon="key"
         title={title}
-        description="Crea una sesión de cliente, proveedor o administrador para consumir los endpoints protegidos."
-        action={
-          <Button icon="key" onClick={() => onNavigate?.("sesion")}>
-            Ir a sesiones
-          </Button>
+        description="Inicia sesión para acceder a esta sección."
+      />
+    </Card>
+  );
+}
+
+export function NeedPermission({ session, permission, title }) {
+  return (
+    <Card>
+      <EmptyState
+        icon="shield"
+        title={title || "Esta función no está disponible"}
+        description={
+          session
+            ? `Tu cuenta (${session.usuario}) no tiene acceso a esta función. Contacta al administrador si necesitas este permiso.`
+            : "Esta función requiere una cuenta con los permisos adecuados."
         }
       />
     </Card>
   );
 }
 
-export function NeedPermission({ onNavigate, session, permission, title }) {
-  const detail = session?.descripcion_rol
-    ? ` ${session.descripcion_rol}`
-    : " Consulta el catálogo de roles para ver qué acciones permite cada uno.";
+export function NeedAdmin({ session }) {
   return (
     <Card>
       <EmptyState
         icon="shield"
-        title={title || "Tu rol no permite esta acción"}
+        title="Esta sección requiere acceso de administrador"
         description={
           session
-            ? `La sesión de ${session.usuario} tiene el rol ${session.rol}${
-                permission ? ` y no incluye el permiso "${permission}"` : ""
-              }.${detail}`
-            : `Inicia una sesión con un rol que incluya${
-                permission ? ` "${permission}"` : " esta función"
-              }.`
-        }
-        action={
-          <Button icon="shield" onClick={() => onNavigate?.("roles")}>
-            Ver roles y permisos
-          </Button>
-        }
-      />
-    </Card>
-  );
-}
-
-export function NeedAdmin({ onNavigate, session }) {
-  return (
-    <Card>
-      <EmptyState
-        icon="shield"
-        title="Esta sección requiere rol ADMIN"
-        description={
-          session
-            ? `La sesión actual es de ${session.usuario} (${session.rol}). Cierra sesión e inicia una administrativa.`
-            : "Inicia sesión con la clave de administrador para gestionar inventarios y el comparador."
-        }
-        action={
-          <Button icon="shield" onClick={() => onNavigate?.("sesion")}>
-            Ir a sesiones
-          </Button>
+            ? `Tu cuenta actual (${session.usuario}) no tiene permisos de administrador.`
+            : "Esta sección solo está disponible para administradores."
         }
       />
     </Card>
