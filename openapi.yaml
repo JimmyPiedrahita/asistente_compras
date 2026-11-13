@@ -3,7 +3,7 @@ info:
   title: Asistente de Compras API
   description: Aplicación web de compras y comparación de productos entre almacenes.
     Incluye registro de clientes, búsqueda con filtros, carrito, cupones por almacén
-    y pago simulado.
+    y pagos.
   version: 4.0.0
 servers:
 - url: http://localhost:8000
@@ -1254,9 +1254,9 @@ components:
         total:
           type: number
           title: Total
-        pago_simulado:
+        pago:
           type: boolean
-          title: Pago Simulado
+          title: Pago
       type: object
       required:
       - compra_id
@@ -1268,7 +1268,7 @@ components:
       - subtotal
       - descuento_total
       - total
-      - pago_simulado
+      - pago
       title: CompraRespuesta
     CredencialesSolicitud:
       properties:

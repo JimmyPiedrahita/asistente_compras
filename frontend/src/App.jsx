@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Icon from "./components/Icon";
 import Toasts from "./components/Toasts";
-import { Badge, Button } from "./components/ui";
+import { Button } from "./components/ui";
 import { AppProvider, useApp } from "./context/AppContext";
 import AdminsPage from "./pages/AdminsPage";
 import AuthPage from "./pages/AuthPage";
@@ -41,12 +41,6 @@ const PAGES = {
   administradores: AdminsPage,
 };
 
-const ROLE_LABEL = {
-  CLIENTE: "Cliente",
-  ADMINISTRADOR_ALMACEN: "Administrador de almacén",
-  ADMINISTRADOR_APP: "Administrador de la aplicación",
-};
-
 function Header({ page, onNavigate }) {
   const { session, logout } = useApp();
   const items = NAV[session.rol] || [];
@@ -76,9 +70,7 @@ function Header({ page, onNavigate }) {
         <div className="ml-auto flex items-center gap-2">
           <div className="hidden text-right sm:block">
             <p className="text-xs font-semibold text-slate-900">{session.usuario}</p>
-            <p className="text-[11px] text-slate-700">{ROLE_LABEL[session.rol]}</p>
           </div>
-          <Badge tone="slate">{ROLE_LABEL[session.rol]}</Badge>
           <Button variant="secondary" size="sm" icon="x" onClick={logout}>
             Salir
           </Button>
@@ -146,7 +138,7 @@ function Shell() {
           {Page ? <Page onNavigate={setPage} /> : null}
         </div>
         <footer className="mt-10 border-t border-slate-200 py-6 text-center text-xs text-slate-500">
-          Compra y pago simulados. Cada almacén coordina la entrega de sus productos por separado.
+          Compras y pagos. Cada almacén coordina la entrega de sus productos por separado.
         </footer>
       </main>
       <Toasts />

@@ -42,7 +42,7 @@ export default function PurchasesPage() {
     <div className="space-y-5">
       <Card
         title="Compras de mi almacén"
-        description="Solo se muestran compras con pago simulado completado que incluyen productos de tu almacén."
+        description="Solo se muestran compras con pago completado que incluyen productos de tu almacén."
         actions={
           <Button size="sm" variant="secondary" icon="refresh" onClick={cargar}>
             Actualizar
@@ -70,22 +70,23 @@ export default function PurchasesPage() {
                 >
                   <button
                     onClick={() => setAbierta(expandida ? "" : compra.compra_id)}
-                    className="flex w-full flex-wrap items-center gap-3 bg-slate-50/60 px-4 py-3 text-left transition hover:bg-slate-50"
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 bg-slate-50/60 px-4 py-3 text-left transition hover:bg-slate-50"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
-                        Compra <span className="font-mono text-xs">{compra.compra_id}</span>
-                        <Badge tone="emerald">Pagada (simulada)</Badge>
+                        Compra{" "}
+                        <span className="break-all font-mono text-xs">{compra.compra_id}</span>
+                        <Badge tone="emerald">Pagada</Badge>
                       </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
+                      <p className="mt-0.5 break-words text-xs text-slate-500">
                         {fecha(compra.fecha)} · {compra.cliente_nombre}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="shrink-0 text-right">
                       <p className="text-sm font-bold tabular-nums text-slate-900">
                         <Money value={compra.total} />
                       </p>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="whitespace-nowrap text-[11px] text-slate-400">
                         {compra.items.length} {compra.items.length === 1 ? "producto" : "productos"}
                       </p>
                     </div>
@@ -97,7 +98,7 @@ export default function PurchasesPage() {
                   {expandida ? (
                     <div className="border-t border-slate-100 px-4 py-4">
                       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Productos de mi almacén
                           </p>
@@ -161,15 +162,17 @@ export default function PurchasesPage() {
                           </dl>
                         </div>
 
-                        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4 text-sm">
+                        <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/60 p-4 text-sm">
                           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Datos de entrega
                           </p>
-                          <p className="mt-2 font-medium text-slate-900">{compra.cliente_nombre}</p>
-                          <p className="text-slate-600">{compra.telefono}</p>
-                          <p className="mt-1 text-slate-600">{compra.direccion}</p>
-                          <p className="text-slate-600">{compra.ciudad}</p>
-                          <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                          <p className="mt-2 break-words font-medium text-slate-900">
+                            {compra.cliente_nombre}
+                          </p>
+                          <p className="break-words text-slate-600">{compra.telefono}</p>
+                          <p className="mt-1 break-words text-slate-600">{compra.direccion}</p>
+                          <p className="break-words text-slate-600">{compra.ciudad}</p>
+                          <p className="mt-3 max-w-full break-all text-xs leading-relaxed text-slate-500">
                             La entrega se coordina por fuera de la aplicación. Esta sección es
                             únicamente de consulta.
                           </p>

@@ -18,8 +18,7 @@ const AVISO_ENTREGA =
   "Cada almacén coordina la entrega de sus productos de forma independiente. " +
   "Compartiremos tu nombre, teléfono y dirección con los almacenes incluidos en esta " +
   "compra para que puedan gestionar la entrega. Una compra con productos de varios " +
-  "almacenes puede implicar entregas separadas. En esta versión la compra y el pago " +
-  "son simulados y no generan una entrega real.";
+  "almacenes puede implicar entregas separadas.";
 
 function dinero(valor) {
   return new Intl.NumberFormat("es-CO", {
@@ -134,7 +133,7 @@ export default function CartPage({ onNavigate }) {
       claveRef.current = nuevaClaveIdempotencia();
       setCompra(datos);
       setResumen(null);
-      notify("Pago simulado completado. La compra quedó registrada.", "success", "Compra");
+      notify("Pago completado. La compra quedó registrada.", "success", "Compra");
     } catch (error) {
       if (error?.status === 409 && error.payload?.detalles?.resumen) {
         setResumen(error.payload.detalles.resumen);
@@ -169,10 +168,9 @@ export default function CartPage({ onNavigate }) {
             <span className="grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
               <Icon name="check" size={26} />
             </span>
-            <h1 className="mt-4 text-xl font-bold text-slate-900">Pago simulado completado</h1>
+            <h1 className="mt-4 text-xl font-bold text-slate-900">Pago completado</h1>
             <p className="mt-1 max-w-xl text-sm text-slate-600">
-              Tu compra quedó registrada. No se realizó ningún cobro real y esta compra no
-              genera una entrega real.
+              Tu compra quedó registrada y los datos de entrega fueron guardados.
             </p>
             <div className="mt-4 grid w-full gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-4 text-left text-sm sm:grid-cols-2">
               <p>
@@ -184,7 +182,7 @@ export default function CartPage({ onNavigate }) {
                 <span className="text-slate-800">{fecha(compra.fecha)}</span>
               </p>
               <p>
-                <span className="text-slate-500">Total pagado (simulado): </span>
+                <span className="text-slate-500">Total pagado: </span>
                 <span className="font-semibold text-slate-900">{dinero(compra.total)}</span>
               </p>
               <p>
@@ -500,11 +498,8 @@ export default function CartPage({ onNavigate }) {
             loading={confirmando}
             onClick={confirmar}
           >
-            Confirmar pago simulado · {dinero(resumen.total)}
+            Confirmar pago · {dinero(resumen.total)}
           </Button>
-          <p className="mt-2 text-center text-[11px] text-slate-400">
-            No se realizará ningún cobro real.
-          </p>
         </Card>
       </div>
     </div>

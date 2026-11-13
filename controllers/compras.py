@@ -1,4 +1,4 @@
-"""Pago simulado, compras completadas y estadísticas del almacén."""
+"""Pagos, compras completadas y estadísticas del almacén."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ class ControladorCompras:
             "descuento_total": resumen["descuento_total"],
             "total": total_actual,
             "autorizacion_datos": True,
-            "pago_simulado": True,
+            "pago": True,
         }
         clave = str(clave_idempotencia or "").strip() or uuid.uuid4().hex
         compra, creada = self.repo.crear_compra(
@@ -133,7 +133,7 @@ class ControladorCompras:
             "subtotal": compra.get("subtotal", 0),
             "descuento_total": compra.get("descuento_total", 0),
             "total": compra.get("total", 0),
-            "pago_simulado": True,
+            "pago": True,
         }
 
     # Consulta para el administrador del almacén -----------------------

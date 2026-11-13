@@ -85,7 +85,11 @@ export function Card({ title, description, actions, children, className = "", bo
               <p className="mt-0.5 text-xs text-slate-500">{description}</p>
             )}
           </div>
-          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+          {actions && (
+            <div className="flex min-w-0 w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">
+              {actions}
+            </div>
+          )}
         </header>
       )}
       <div className={`p-5 sm:p-6 ${bodyClassName}`}>{children}</div>

@@ -189,12 +189,13 @@ export default function ShoppingListPage({ onNavigate }) {
           title="Resultados de la búsqueda"
           description="Los filtros comparan el precio registrado antes de cupones."
           actions={
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex w-full min-w-0 flex-wrap gap-1.5 sm:w-auto">
               {MODOS.map((opcion) => (
                 <Button
                   key={opcion.id}
                   size="sm"
                   variant={modo === opcion.id ? "primary" : "secondary"}
+                  className="min-w-0 flex-1 whitespace-normal px-2 text-center sm:flex-none sm:px-3"
                   onClick={() => buscar(opcion.id)}
                   disabled={buscando || !lista.length}
                 >
@@ -296,7 +297,7 @@ export default function ShoppingListPage({ onNavigate }) {
         {resultado && resultado.total_resultados > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
             <p className="text-sm text-slate-600">
-              ¿Ya elegiste? Revisa cantidades, aplica cupones y confirma el pago simulado.
+              ¿Ya elegiste? Revisa cantidades, aplica cupones y confirma el pago.
             </p>
             <Button icon="cart" onClick={() => onNavigate("carrito")}>
               Ir al carrito

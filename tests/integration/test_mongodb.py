@@ -189,7 +189,7 @@ class PruebasRepositorioMongo(unittest.TestCase):
             "descuento_total": 0,
             "total": 10500,
             "autorizacion_datos": True,
-            "pago_simulado": True,
+            "pago": True,
         }
 
         compra, creada = self.repo.crear_compra(

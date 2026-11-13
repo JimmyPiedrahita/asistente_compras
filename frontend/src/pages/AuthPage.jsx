@@ -81,14 +81,14 @@ export default function AuthPage() {
         </h1>
         <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-600">
           Busca cada producto en todos los almacenes registrados, elige la mejor opción,
-          aplica cupones por almacén y finaliza con un pago simulado. Cada almacén coordina
+          aplica cupones por almacén y finaliza con un pago. Cada almacén coordina
           su propia entrega.
         </p>
         <div className="mt-7 grid gap-3 sm:grid-cols-3">
           {[
             { icon: "list", title: "Tu lista", text: "Anota lo que necesitas comprar." },
             { icon: "search", title: "Compara", text: "Filtra por precio y almacén." },
-            { icon: "cart", title: "Compra", text: "Pago simulado, sin cobros reales." },
+            { icon: "cart", title: "Compra", text: "Un pago por todas tus compras" },
           ].map((item) => (
             <div key={item.title} className="rounded-xl border border-slate-200 bg-white p-4">
               <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#e8f1ff] text-[#3483fa]">
@@ -135,12 +135,6 @@ export default function AuthPage() {
 
         {modo === "login" ? (
           <form onSubmit={enviarLogin} className="space-y-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Ingresa a tu cuenta</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Una sola pantalla para clientes, administradores de almacén y de la aplicación.
-              </p>
-            </div>
             <Field label="Correo electrónico" htmlFor="login-email">
               <Input
                 id="login-email"
@@ -170,20 +164,9 @@ export default function AuthPage() {
             <Button type="submit" size="lg" className="w-full" loading={cargando}>
               Entrar
             </Button>
-            <p className="text-center text-xs text-slate-500">
-              El registro público es solo para clientes. Las cuentas administrativas las crea el
-              administrador de la aplicación.
-            </p>
           </form>
         ) : (
           <form onSubmit={enviarRegistro} className="space-y-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Crea tu cuenta de cliente</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Necesitamos estos datos para registrar tus compras y compartirlos con los
-                almacenes que participen en tu entrega.
-              </p>
-            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Nombre" htmlFor="reg-nombre" className="sm:col-span-2">
                 <Input id="reg-nombre" required autoComplete="name" {...campo("nombre")} />
@@ -237,7 +220,7 @@ export default function AuthPage() {
               <span>
                 Autorizo el tratamiento de mis datos personales y su comunicación con los
                 almacenes incluidos en mis compras, únicamente para gestionar la entrega. La
-                compra y el pago son simulados.
+                compra y el pago quedan registrados.
               </span>
             </label>
             <Button type="submit" size="lg" className="w-full" loading={cargando}>

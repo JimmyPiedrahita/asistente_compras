@@ -39,7 +39,7 @@ La vista no accede a MongoDB y los controladores no dependen de FastAPI.
 
 Roles:
 
-- `CLIENTE`: registro público, lista, búsqueda, carrito, cupones y pago simulado.
+- `CLIENTE`: registro público, lista, búsqueda, carrito, cupones y pago.
 - `ADMINISTRADOR_ALMACEN`: productos, CSV, cupones, compras y estadísticas de su
   almacén.
 - `ADMINISTRADOR_APP`: almacenes y administradores de almacén.
@@ -111,7 +111,7 @@ en `(0, 100]`.
 
 `_id`, `cliente_id`, `clave_idempotencia`, `cliente_nombre`,
 `datos_entrega`, `items`, `por_almacen`, `subtotal`, `descuento_total`, `total`,
-`autorizacion_datos`, `pago_simulado` y `fecha`.
+`autorizacion_datos`, `pago` y `fecha`.
 
 - `(cliente_id, clave_idempotencia)` es único.
 - `items` es una copia inmutable de nombre, presentación, precio, cantidad e

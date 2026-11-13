@@ -91,7 +91,7 @@ export default function StatsPage() {
     <div className="space-y-5">
       <Card
         title="Estadísticas de mi almacén"
-        description="Medidas por unidades vendidas en compras con pago simulado completado. Sin filtros por fecha."
+        description="Medidas por unidades vendidas en compras con pago completado. Sin filtros por fecha."
         actions={
           <Button size="sm" variant="secondary" icon="refresh" onClick={cargar}>
             Actualizar

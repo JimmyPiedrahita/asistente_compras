@@ -1,4 +1,4 @@
-"""Endpoints del cliente: lista, búsqueda, carrito y compra simulada."""
+"""Endpoints del cliente: lista, búsqueda, carrito y compra."""
 
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ def quitar_cupon(
     return carrito.quitar_cupon(sesion, codigo)
 
 
-# Compra simulada -------------------------------------------------------
+# Compra y pago ---------------------------------------------------------
 @router.post("/checkout", response_model=CompraRespuesta)
 def finalizar_compra(
     datos: CheckoutSolicitud,

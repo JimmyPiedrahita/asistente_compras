@@ -9,7 +9,7 @@ ADMINISTRADOR_APP = "ADMINISTRADOR_APP"
 ROLES = (CLIENTE, ADMINISTRADOR_ALMACEN, ADMINISTRADOR_APP)
 
 DESCRIPCION_ROLES = {
-    CLIENTE: "Cliente: compra, compara y finaliza pagos simulados.",
+    CLIENTE: "Cliente: compra, compara y finaliza pagos.",
     ADMINISTRADOR_ALMACEN: (
         "Administrador de almacén: gestiona sus productos, cupones, compras y "
         "estadísticas. No puede comprar ni administrar la plataforma."

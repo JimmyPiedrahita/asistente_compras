@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Badge,
@@ -7,13 +7,81 @@ import {
   EmptyState,
   Field,
   Input,
-  Select,
   Spinner,
 } from "../components/ui";
 import { useApp } from "../context/AppContext";
 import { api } from "../api";
 
 const VACIO = { nombre: "", email: "", password: "", almacen_id: "" };
+
+function AlmacenSelect({ value, almacenes, onChange }) {
+  const [abierto, setAbierto] = useState(false);
+  const contenedorRef = useRef(null);
+  const seleccionado = almacenes.find((almacen) => almacen.almacen_id === value);
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const cerrar = (evento) => {
+      if (!contenedorRef.current?.contains(evento.target)) setAbierto(false);
+    };
+    const cerrarConEscape = (evento) => {
+      if (evento.key === "Escape") setAbierto(false);
+    };
+    document.addEventListener("mousedown", cerrar);
+    document.addEventListener("keydown", cerrarConEscape);
+    return () => {
+      document.removeEventListener("mousedown", cerrar);
+      document.removeEventListener("keydown", cerrarConEscape);
+    };
+  }, [abierto]);
+
+  return (
+    <div ref={contenedorRef} className="relative">
+      <button
+        type="button"
+        id="admin-almacen"
+        aria-haspopup="listbox"
+        aria-expanded={abierto}
+        onClick={() => setAbierto((actual) => !actual)}
+        className="flex w-full min-w-0 items-center justify-between rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-left text-sm text-slate-900 transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/5"
+      >
+        <span className={`min-w-0 truncate ${seleccionado ? "" : "text-slate-400"}`}>
+          {seleccionado?.nombre || "Selecciona un almacén"}
+        </span>
+        <span className="ml-2 shrink-0 text-slate-400" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      {abierto ? (
+        <div
+          role="listbox"
+          aria-labelledby="admin-almacen"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+        >
+          {almacenes.map((almacen) => (
+            <button
+              key={almacen.almacen_id}
+              type="button"
+              role="option"
+              aria-selected={value === almacen.almacen_id}
+              onClick={() => {
+                onChange(almacen.almacen_id);
+                setAbierto(false);
+              }}
+              className={`block w-full rounded-md px-3 py-2 text-left text-sm transition hover:bg-slate-50 ${
+                value === almacen.almacen_id
+                  ? "bg-slate-100 font-semibold text-slate-900"
+                  : "text-slate-700"
+              }`}
+            >
+              {almacen.nombre}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function Credenciales({ admin, onGuardado }) {
   const { token, notify, notifyError } = useApp();
@@ -180,8 +248,9 @@ export default function AdminsPage() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[380px_1fr] lg:items-start">
+    <div className="grid min-w-0 gap-5 lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start">
       <Card
+        className="min-w-0"
         title="Crear administrador de almacén"
         description="La cuenta quedará vinculada a un único almacén."
       >
@@ -222,19 +291,11 @@ export default function AdminsPage() {
               />
             </Field>
             <Field label="Almacén asignado" htmlFor="admin-almacen">
-              <Select
-                id="admin-almacen"
+              <AlmacenSelect
                 value={form.almacen_id}
-                onChange={cambiar("almacen_id")}
-                required
-              >
-                <option value="">Selecciona un almacén</option>
-                {almacenes.map((almacen) => (
-                  <option key={almacen.almacen_id} value={almacen.almacen_id}>
-                    {almacen.nombre}
-                  </option>
-                ))}
-              </Select>
+                almacenes={almacenes}
+                onChange={(valor) => setForm((actual) => ({ ...actual, almacen_id: valor }))}
+              />
             </Field>
             <Button type="submit" icon="plus" loading={guardando} className="w-full">
               Crear administrador
@@ -248,6 +309,7 @@ export default function AdminsPage() {
       </Card>
 
       <Card
+        className="min-w-0"
         title={`Administradores de almacén · ${admins.length}`}
         description="Puedes actualizar el correo y la contraseña de cada cuenta."
       >

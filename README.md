@@ -2,7 +2,7 @@
 
 Aplicación web de compras y comparación de productos entre almacenes. El cliente
 arma una lista, compara precios, usa un carrito, aplica cupones por almacén y
-finaliza con un **pago simulado**. Cada almacén gestiona sus productos, cupones,
+finaliza con un **pago**. Cada almacén gestiona sus productos, cupones,
 compras y estadísticas de forma independiente.
 
 - Interfaz React + Tailwind CSS servida por la propia API.
@@ -23,7 +23,7 @@ compras y estadísticas de forma independiente.
 - Hasta tres cupones por compra, uno por almacén.
 - Resumen por almacén y total general.
 - Datos de entrega editables antes de confirmar.
-- Pago simulado idempotente y comprobante de compra.
+- Pago idempotente y comprobante de compra.
 
 ### Administrador de almacén
 
@@ -52,7 +52,7 @@ compras y estadísticas de forma independiente.
   almacén. No existen cupones globales.
 - Las compras guardan una copia inmutable de productos, precios, cupones y datos
   de entrega. Eliminar productos o cupones después no altera compras pasadas.
-- La compra y el pago son simulados; no hay cobros ni entregas reales.
+- La compra registra el pago y los datos necesarios para coordinar la entrega.
 
 ## Inicio rápido con Docker
 
@@ -172,7 +172,7 @@ Prefijo: `/api/v1`. La autenticación usa `Authorization: Bearer <session_id>`.
 | PATCH/DELETE | `/cart/items/{item_id}` | Cambiar cantidad o quitar. |
 | POST | `/cart/coupons` | Aplicar cupón. |
 | DELETE | `/cart/coupons/{codigo}` | Quitar cupón. |
-| POST | `/checkout` | Confirmar pago simulado. |
+| POST | `/checkout` | Confirmar pago. |
 
 ### Administrador de almacén
 

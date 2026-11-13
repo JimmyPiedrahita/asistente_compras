@@ -307,14 +307,14 @@ export default function ProductsPage() {
         description="La importación es completa o no se realiza: si una fila tiene errores, no se guarda ningún producto."
       >
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Encabezados requeridos
             </p>
-            <code className="mt-2 block overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
+            <code className="mt-2 block break-all whitespace-normal rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
               {CABECERAS}
             </code>
-            <ul className="mt-3 space-y-1 text-xs leading-relaxed text-slate-500">
+            <ul className="mt-3 break-words space-y-1 text-xs leading-relaxed text-slate-500">
               <li>· Archivo UTF-8 separado por comas, con encabezados en la primera fila.</li>
               <li>· <span className="font-medium text-slate-700">tipo_producto</span>, <span className="font-medium text-slate-700">nombre</span>, <span className="font-medium text-slate-700">precio</span> y <span className="font-medium text-slate-700">presentacion</span> son obligatorios.</li>
               <li>· <span className="font-medium text-slate-700">marca_variedad</span> es opcional.</li>
@@ -322,12 +322,12 @@ export default function ProductsPage() {
               <li>· No incluyas una columna de almacén: se asigna automáticamente.</li>
             </ul>
           </div>
-          <div className="flex flex-col justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/40 p-5 text-center">
+          <div className="min-w-0 flex flex-col justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/40 p-5 text-center">
             <span className="mx-auto grid h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500">
               <Icon name="file" size={20} />
             </span>
             <p className="mt-3 text-sm font-medium text-slate-700">Selecciona un archivo .csv</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 break-words text-xs text-slate-500">
               Solo se agregarán productos; no se actualizan ni eliminan los existentes.
             </p>
             <input
@@ -338,7 +338,7 @@ export default function ProductsPage() {
               onChange={importar}
             />
             <Button
-              className="mx-auto mt-3"
+              className="mx-auto mt-3 max-w-full whitespace-normal"
               variant="secondary"
               icon="download"
               loading={importando}
@@ -368,7 +368,7 @@ export default function ProductsPage() {
                 {erroresCsv.map((error, indice) => (
                   <tr key={`${error.fila}-${indice}`}>
                     <td className="px-3 py-2 align-top font-mono text-rose-700">{error.fila}</td>
-                    <td className="px-3 py-2 text-slate-700">{error.mensaje}</td>
+                    <td className="break-words px-3 py-2 text-slate-700">{error.mensaje}</td>
                   </tr>
                 ))}
               </tbody>

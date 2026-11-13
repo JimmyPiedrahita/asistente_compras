@@ -66,7 +66,7 @@ def create_app(
         description=(
             "Aplicación web de compras y comparación de productos entre almacenes. "
             "Incluye registro de clientes, búsqueda con filtros, carrito, cupones "
-            "por almacén y pago simulado."
+            "por almacén y pagos."
         ),
         lifespan=lifespan,
         openapi_tags=[

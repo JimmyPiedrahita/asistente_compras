@@ -85,7 +85,7 @@ class CompraRespuesta(ModeloBase):
     subtotal: float
     descuento_total: float
     total: float
-    pago_simulado: bool
+    pago: bool
 
 
 __all__ = [

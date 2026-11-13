@@ -349,7 +349,7 @@ class PruebasAPI(unittest.TestCase):
         )
         self.assertEqual(compra.status_code, 200, compra.text)
         comprobante = compra.json()
-        self.assertTrue(comprobante["pago_simulado"])
+        self.assertTrue(comprobante["pago"])
         self.assertEqual(comprobante["total"], 9250)
         self.assertEqual(comprobante["datos_entrega"]["ciudad"], "Medellín")
         self.assertEqual(len(comprobante["por_almacen"]), 2)
