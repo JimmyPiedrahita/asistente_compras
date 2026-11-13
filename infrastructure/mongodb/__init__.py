@@ -1,15 +1,6 @@
-"""Cliente MongoDB, repositorio por almacén y proyección integrada."""
+"""Persistencia MongoDB de la aplicación."""
 
 from .cliente import ClienteMongo
-from .comparador import SincronizadorComparador
-from .nulo import RepositorioNulo
-from .repositorio import MongoInventarioRepository
-from .seguridad import MongoSeguridadRepository
+from .repositorio import RepositorioMongo
 
-__all__ = [
-    "ClienteMongo",
-    "MongoInventarioRepository",
-    "MongoSeguridadRepository",
-    "RepositorioNulo",
-    "SincronizadorComparador",
-]
+__all__ = ["ClienteMongo", "RepositorioMongo"]

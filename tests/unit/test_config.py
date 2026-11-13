@@ -1,108 +1,72 @@
-"""Pruebas unitarias de configuración."""
+"""Pruebas de configuración por variables de entorno."""
 
 from __future__ import annotations
 
 import unittest
 
-from core.config import Settings, crear_almacenes
+from core.config import Settings
 from core.errors import ConfiguracionInvalida
+
+ENTORNO = {
+    "MONGODB_URI": "mongodb://localhost:27017",
+    "ADMIN_EMAIL": "Admin@Example.com",
+    "ADMIN_PASSWORD": "clave-segura",
+}
 
 
 class PruebasConfiguracion(unittest.TestCase):
     def test_from_env_minimo(self) -> None:
-        settings = Settings.from_env(
-            {
-                "MONGODB_URI": "mongodb://localhost:27017",
-                "ADMIN_CLAVE": "clave-segura",
-            }
-        )
+        settings = Settings.from_env(ENTORNO)
         self.assertEqual(settings.mongodb_uri, "mongodb://localhost:27017")
-        self.assertEqual(settings.admin_clave, "clave-segura")
-        self.assertEqual(len(settings.almacenes), 3)
-        self.assertEqual(settings.almacenes[0].base_datos, "warehouse_1")
-        self.assertEqual(settings.mongodb_comparador_db, "comparador")
+        self.assertEqual(settings.mongodb_db, "asistente_compras")
+        self.assertEqual(settings.admin_email, "admin@example.com")
+        self.assertEqual(settings.admin_password, "clave-segura")
+        self.assertEqual(settings.session_ttl_seconds, 3600)
+        self.assertEqual(settings.max_sessions, 1000)
 
-    def test_prefijo_y_almacenes_personalizados(self) -> None:
+    def test_valores_personalizados(self) -> None:
         settings = Settings.from_env(
             {
-                "MONGODB_URI": "mongodb://localhost:27017",
-                "ADMIN_CLAVE": "clave-segura",
-                "MONGODB_DB_PREFIX": "tienda",
-                "WAREHOUSES": "1:Centro,2:Norte",
+                **ENTORNO,
+                "MONGODB_DB": "tienda_test",
                 "CORS_ORIGINS": "http://a.test, http://b.test",
+                "SESSION_TTL_SECONDS": "60",
+                "MAX_SESSIONS": "5",
+                "MAX_CSV_BYTES": "2048",
+                "MONGODB_TIMEOUT_MS": "1500",
+                "ADMIN_NOMBRE": "Administrador",
             }
         )
-        self.assertEqual([a.id for a in settings.almacenes], [1, 2])
-        self.assertEqual(settings.almacenes[0].base_datos, "tienda_1")
-        self.assertEqual(settings.almacenes[0].nombre, "Centro")
+        self.assertEqual(settings.mongodb_db, "tienda_test")
         self.assertEqual(settings.cors_origins, ("http://a.test", "http://b.test"))
+        self.assertEqual(settings.session_ttl_seconds, 60)
+        self.assertEqual(settings.max_sessions, 5)
+        self.assertEqual(settings.max_csv_bytes, 2048)
+        self.assertEqual(settings.mongodb_timeout_ms, 1500)
 
-    def test_errores(self) -> None:
+    def test_errores_de_configuracion(self) -> None:
         with self.assertRaises(ConfiguracionInvalida):
             Settings.from_env({})
         with self.assertRaises(ConfiguracionInvalida):
             Settings.from_env({"MONGODB_URI": "mongodb://x"})
         with self.assertRaises(ConfiguracionInvalida):
-            Settings.from_env({"MONGODB_URI": "mongodb://x", "ADMIN_CLAVE": "123"})
+            Settings.from_env({**ENTORNO, "ADMIN_PASSWORD": "corta"})
         with self.assertRaises(ConfiguracionInvalida):
-            Settings.from_env(
-                {
-                    "MONGODB_URI": "mongodb://x",
-                    "ADMIN_CLAVE": "clave-segura",
-                    "MONGODB_DB_PREFIX": "prefijo.invalido",
-                }
-            )
-
-    def test_crear_almacenes(self) -> None:
-        almacenes = crear_almacenes("x")
-        self.assertEqual([a.id for a in almacenes], [1, 2, 3])
-        self.assertEqual(almacenes[2].base_datos, "x_3")
-
-    def test_base_comparador(self) -> None:
-        settings = Settings.from_env(
-            {
-                "MONGODB_URI": "mongodb://localhost:27017",
-                "ADMIN_CLAVE": "clave-segura",
-                "MONGODB_COMPARADOR_DB": "integrada",
-            }
-        )
-        self.assertEqual(settings.mongodb_comparador_db, "integrada")
-
+            Settings.from_env({**ENTORNO, "ADMIN_EMAIL": "no-es-correo"})
         with self.assertRaises(ConfiguracionInvalida):
-            Settings.from_env(
-                {
-                    "MONGODB_URI": "mongodb://localhost:27017",
-                    "ADMIN_CLAVE": "clave-segura",
-                    "MONGODB_COMPARADOR_DB": "nombre.invalido",
-                }
-            )
+            Settings.from_env({**ENTORNO, "ADMIN_EMAIL": "admin@asistente.local"})
         with self.assertRaises(ConfiguracionInvalida):
-            Settings.from_env(
-                {
-                    "MONGODB_URI": "mongodb://localhost:27017",
-                    "ADMIN_CLAVE": "clave-segura",
-                    "MONGODB_DB_PREFIX": "tienda",
-                    "MONGODB_COMPARADOR_DB": "tienda_1",
-                }
-            )
+            Settings.from_env({**ENTORNO, "MONGODB_DB": "base.invalida"})
+        with self.assertRaises(ConfiguracionInvalida):
+            Settings.from_env({**ENTORNO, "SESSION_TTL_SECONDS": "0"})
+        with self.assertRaises(ConfiguracionInvalida):
+            Settings.from_env({**ENTORNO, "MAX_SESSIONS": "abc"})
 
-    def test_prefijo_deriva_almacenes_en_construccion_directa(self) -> None:
-        settings = Settings(
-            mongodb_uri="mongodb://localhost:27017",
-            admin_clave="clave-segura",
-            mongodb_db_prefix="directo",
-        )
-        self.assertEqual(
-            [a.base_datos for a in settings.almacenes or ()],
-            ["directo_1", "directo_2", "directo_3"],
-        )
-
-    def test_de_pruebas_deriva_almacenes_del_prefijo(self) -> None:
-        settings = Settings.de_pruebas(mongodb_db_prefix="test_aislado")
-        self.assertEqual(
-            [a.base_datos for a in settings.almacenes or ()],
-            ["test_aislado_1", "test_aislado_2", "test_aislado_3"],
-        )
+    def test_configuracion_de_pruebas(self) -> None:
+        settings = Settings.de_pruebas(mongodb_db="pruebas")
+        self.assertEqual(settings.mongodb_db, "pruebas")
+        self.assertEqual(settings.admin_email, "admin@example.com")
+        self.assertEqual(settings.cors_origins, ())
 
 
 if __name__ == "__main__":

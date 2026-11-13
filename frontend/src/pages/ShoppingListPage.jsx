@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, errorText } from "../api";
 import Icon from "../components/Icon";
 import {
   Alert,
@@ -9,222 +8,301 @@ import {
   EmptyState,
   Field,
   Input,
-  NeedPermission,
-  NeedSession,
+  Money,
   Spinner,
 } from "../components/ui";
 import { useApp } from "../context/AppContext";
+import { api } from "../api";
+
+const MODOS = [
+  { id: "catalogo", label: "Todo el catálogo" },
+  { id: "mejor_precio", label: "Más barato por almacén" },
+  { id: "global", label: "Más barato global" },
+];
 
 export default function ShoppingListPage({ onNavigate }) {
-  const { session, token, can, notify, notifyError } = useApp();
-  const [state, setState] = useState({ loading: false, lista: [], error: null });
-  const [nombre, setNombre] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [removing, setRemoving] = useState(null);
-  const [exporting, setExporting] = useState(false);
+  const { token, notify, notifyError } = useApp();
+  const [lista, setLista] = useState([]);
+  const [texto, setTexto] = useState("");
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [modo, setModo] = useState("catalogo");
+  const [buscando, setBuscando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+  const [agregando, setAgregando] = useState("");
 
-  const load = useCallback(async () => {
-    if (!token || !can("crear_lista")) return;
-    setState((current) => ({ ...current, loading: true, error: null }));
+  const cargar = useCallback(async () => {
     try {
-      const { data } = await api.getShoppingList(token);
-      setState({ loading: false, lista: data?.lista || [], error: null });
+      const datos = await api.getShoppingList(token);
+      setLista(datos?.lista ?? []);
     } catch (error) {
-      setState({ loading: false, lista: [], error });
+      notifyError(error);
+    } finally {
+      setCargando(false);
     }
-  }, [can, token]);
+  }, [notifyError, token]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    cargar();
+  }, [cargar]);
 
-  if (!session) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Mi lista de compras
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Organiza los productos que necesitas comprar.
-          </p>
-        </div>
-        <NeedSession />
-      </div>
-    );
-  }
+  const agregar = async (evento) => {
+    evento.preventDefault();
+    const nombre = texto.trim();
+    if (!nombre) return;
+    setGuardando(true);
+    try {
+      const datos = await api.addShoppingListItem(token, nombre);
+      setLista(datos?.lista ?? []);
+      setTexto("");
+      setResultado(null);
+      notify(`“${nombre}” se agregó a tu lista.`, "success", "Lista de compras");
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setGuardando(false);
+    }
+  };
 
-  if (!can("crear_lista")) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Mi lista de compras
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            La lista de compras está disponible para cuentas de cliente.
-          </p>
-        </div>
-        <NeedPermission
-          session={session}
-          permission="crear_lista"
-          title="La lista de compras no está disponible para tu cuenta"
-        />
-      </div>
-    );
-  }
+  const quitar = async (nombre) => {
+    try {
+      const datos = await api.removeShoppingListItem(token, nombre);
+      setLista(datos?.lista ?? []);
+      setResultado(null);
+      notify(`“${nombre}” se quitó de tu lista.`, "success", "Lista de compras");
+    } catch (error) {
+      notifyError(error);
+    }
+  };
 
-  const add = async (event) => {
-    event.preventDefault();
-    const value = nombre.trim();
-    if (!value) {
-      notify("Escribe el nombre del producto.", "info", "Datos incompletos");
+  const buscar = async (nuevoModo = modo) => {
+    if (!lista.length) {
+      notify("Agrega al menos un producto a tu lista antes de buscar.", "info");
       return;
     }
-    setAdding(true);
+    setBuscando(true);
     try {
-      const { data } = await api.addShoppingListItem(token, value);
-      setState({ loading: false, lista: data?.lista || [], error: null });
-      setNombre("");
-      notify(`"${value}" se agregó a la lista.`, "success", "Lista de compras");
+      const datos = await api.search(token, nuevoModo);
+      setResultado(datos);
+      setModo(nuevoModo);
     } catch (error) {
       notifyError(error);
     } finally {
-      setAdding(false);
+      setBuscando(false);
     }
   };
 
-  const remove = async (item) => {
-    setRemoving(item);
+  const agregarAlCarrito = async (fila) => {
+    const clave = `${fila.almacen_id}:${fila.producto.producto_id}`;
+    setAgregando(clave);
     try {
-      const { data } = await api.removeShoppingListItem(token, item);
-      setState((current) => ({ ...current, lista: data?.lista || [] }));
-      notify(`"${item}" se eliminó de la lista.`, "success", "Lista de compras");
+      await api.addCartItem(token, {
+        almacen_id: fila.almacen_id,
+        producto_id: fila.producto.producto_id,
+        cantidad: 1,
+      });
+      notify(
+        `${fila.producto.nombre} de ${fila.almacen} se agregó al carrito.`,
+        "success",
+        "Carrito",
+      );
     } catch (error) {
       notifyError(error);
     } finally {
-      setRemoving(null);
+      setAgregando("");
     }
   };
 
-  const exportCsv = async () => {
-    setExporting(true);
-    try {
-      const filename = await api.exportShoppingList(token);
-      notify(`Descargado ${filename}`, "success", "Exportación");
-    } catch (error) {
-      notifyError(error);
-    } finally {
-      setExporting(false);
-    }
-  };
+  const sinCoincidenciasTotales =
+    resultado && resultado.hay_productos && resultado.total_resultados === 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Mi lista de compras
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Organiza los productos que necesitas comprar.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" icon="refresh" onClick={load} loading={state.loading}>
-            Actualizar
+    <div className="grid gap-5 lg:grid-cols-[360px_1fr] lg:items-start">
+      <Card
+        title="Mi lista de compras"
+        description="Anota los productos que necesitas y luego compáralos entre almacenes."
+      >
+        <form onSubmit={agregar} className="flex gap-2">
+          <Input
+            value={texto}
+            onChange={(evento) => setTexto(evento.target.value)}
+            placeholder="Ej. arroz, leche, huevos"
+            maxLength={200}
+            aria-label="Producto para agregar a la lista"
+          />
+          <Button type="submit" icon="plus" loading={guardando} disabled={!texto.trim()}>
+            Agregar
           </Button>
-          <Button size="sm" variant="secondary" icon="download" onClick={exportCsv} loading={exporting}>
-            Exportar CSV
-          </Button>
-        </div>
-      </div>
+        </form>
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <Card
-          title="Productos en la lista"
-          description={`${state.lista.length} elemento${state.lista.length === 1 ? "" : "s"}`}
-          actions={<Badge tone="slate">{state.lista.length}</Badge>}
-        >
-          {state.loading ? (
-            <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
+        <div className="mt-4">
+          {cargando ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
               <Spinner /> Cargando lista…
             </div>
-          ) : state.error ? (
-            <Alert tone="error" title="No se pudo cargar la lista">
-              {errorText(state.error)}
-            </Alert>
-          ) : state.lista.length === 0 ? (
+          ) : lista.length === 0 ? (
             <EmptyState
               icon="list"
-              title="La lista está vacía"
-              description="Agrega el primer producto desde el formulario o desde los resultados de búsqueda."
-              action={
-                <Button size="sm" variant="secondary" icon="search" onClick={() => onNavigate("busqueda")}>
-                  Buscar productos
-                </Button>
-              }
+              title="Tu lista está vacía"
+              description="Agrega los productos que quieres comprar. La lista no agrega nada al carrito."
             />
           ) : (
-            <ul className="divide-y divide-slate-100">
-              {state.lista.map((item, index) => (
-                <li key={item} className="flex items-center justify-between gap-3 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 font-mono text-xs font-semibold text-slate-500">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-800">{item}</p>
-                      <p className="text-xs text-slate-400">Pendiente de compra</p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="dangerSoft"
-                    icon="trash"
-                    loading={removing === item}
-                    onClick={() => remove(item)}
+            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+              {lista.map((nombre) => (
+                <li key={nombre} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500">
+                    <Icon name="check" size={13} />
+                  </span>
+                  <span className="min-w-0 flex-1 break-words text-sm font-medium text-slate-800">
+                    {nombre}
+                  </span>
+                  <button
+                    onClick={() => quitar(nombre)}
+                    className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    aria-label={`Quitar ${nombre} de la lista`}
                   >
-                    <span className="hidden sm:inline">Eliminar</span>
-                  </Button>
+                    <Icon name="trash" size={15} />
+                  </button>
                 </li>
               ))}
             </ul>
           )}
+        </div>
+
+        <Button
+          size="lg"
+          icon="search"
+          className="mt-4 w-full"
+          loading={buscando}
+          disabled={!lista.length}
+          onClick={() => buscar(modo)}
+        >
+          Buscar productos
+        </Button>
+        <p className="mt-2 text-center text-xs text-slate-500">
+          Compara precios de la presentación estándar de cada producto.
+        </p>
+      </Card>
+
+      <div className="space-y-4">
+        <Card
+          title="Resultados de la búsqueda"
+          description="Los filtros comparan el precio registrado antes de cupones."
+          actions={
+            <div className="flex flex-wrap gap-1.5">
+              {MODOS.map((opcion) => (
+                <Button
+                  key={opcion.id}
+                  size="sm"
+                  variant={modo === opcion.id ? "primary" : "secondary"}
+                  onClick={() => buscar(opcion.id)}
+                  disabled={buscando || !lista.length}
+                >
+                  {opcion.label}
+                </Button>
+              ))}
+            </div>
+          }
+        >
+          {!resultado ? (
+            <EmptyState
+              icon="search"
+              title="Aún no has buscado"
+              description="Cuando tengas tu lista, pulsa “Buscar productos” para ver las opciones de los almacenes."
+            />
+          ) : buscando ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+              <Spinner /> Buscando…
+            </div>
+          ) : !resultado.hay_productos ? (
+            <EmptyState
+              icon="package"
+              title="No hay productos disponibles por el momento."
+              description="Los almacenes todavía no han registrado productos en la aplicación."
+            />
+          ) : sinCoincidenciasTotales ? (
+            <EmptyState
+              icon="search"
+              title="No se encontraron productos para tu lista de compras."
+              description="Prueba con otros nombres o revisa que el producto esté registrado por algún almacén."
+            />
+          ) : (
+            <div className="space-y-6">
+              {resultado.grupos.map((grupo) => (
+                <section key={grupo.producto_buscado}>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-bold capitalize text-slate-900">
+                      {grupo.producto_buscado}
+                    </h3>
+                    <Badge tone="slate">
+                      {grupo.resultados.length}{" "}
+                      {grupo.resultados.length === 1 ? "opción" : "opciones"}
+                    </Badge>
+                  </div>
+                  {grupo.sin_resultados ? (
+                    <Alert tone="warning">
+                      No se encontraron productos para “{grupo.producto_buscado}”.
+                    </Alert>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                      <ul className="divide-y divide-slate-100">
+                        {grupo.resultados.map((fila) => {
+                          const clave = `${fila.almacen_id}:${fila.producto.producto_id}`;
+                          return (
+                            <li
+                              key={clave}
+                              className="flex flex-wrap items-center gap-3 bg-white px-4 py-3"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {fila.producto.nombre}
+                                  {fila.producto.marca_variedad ? (
+                                    <span className="font-normal text-slate-500">
+                                      {" "}
+                                      · {fila.producto.marca_variedad}
+                                    </span>
+                                  ) : null}
+                                </p>
+                                <p className="mt-0.5 text-xs text-slate-500">
+                                  {fila.almacen} · {fila.producto.presentacion}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-slate-900">
+                                  <Money value={fila.producto.precio} />
+                                </p>
+                                <p className="text-[11px] text-slate-400">por unidad</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                icon="cart"
+                                loading={agregando === clave}
+                                onClick={() => agregarAlCarrito(fila)}
+                              >
+                                Agregar
+                              </Button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
         </Card>
 
-        <div className="space-y-6">
-          <Card title="Agregar producto">
-            <form className="space-y-4" onSubmit={add}>
-              <Field label="Nombre" hint="Si el producto ya existe en la lista, se ignorará.">
-                <Input
-                  value={nombre}
-                  onChange={(event) => setNombre(event.target.value)}
-                  placeholder="Leche"
-                  maxLength={200}
-                  autoComplete="off"
-                />
-              </Field>
-              <Button type="submit" icon="plus" loading={adding} className="w-full">
-                Agregar a la lista
-              </Button>
-            </form>
-          </Card>
-
-          <Card title="Atajos">
-            <div className="space-y-2">
-              <button
-                onClick={() => onNavigate("busqueda")}
-                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3.5 py-3 text-left text-sm transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                <span className="flex items-center gap-2 text-slate-600">
-                  <Icon name="search" size={15} className="text-slate-400" /> Buscar y agregar al carrito
-                </span>
-                <Icon name="arrow" size={14} className="text-slate-400" />
-              </button>
-            </div>
-          </Card>
-        </div>
+        {resultado && resultado.total_resultados > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
+            <p className="text-sm text-slate-600">
+              ¿Ya elegiste? Revisa cantidades, aplica cupones y confirma el pago simulado.
+            </p>
+            <Button icon="cart" onClick={() => onNavigate("carrito")}>
+              Ir al carrito
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

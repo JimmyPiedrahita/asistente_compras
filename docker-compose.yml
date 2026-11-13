@@ -1,103 +1,35 @@
 services:
-  # Genera el keyfile del replica set una sola vez y lo guarda en un volumen.
-  # Con --auth, MongoDB exige keyfile para la autenticación interna del RS.
-  mongo-keyfile:
-    image: mongo:7.0
-    container_name: asistente_compras_mongo_keyfile
-    entrypoint: ["bash", "-c"]
-    command:
-      - |
-        set -e
-        if [ ! -s /keys/mongo-keyfile ]; then
-          openssl rand -base64 756 > /keys/mongo-keyfile
-          echo "Keyfile generado"
-        else
-          echo "Keyfile existente"
-        fi
-        chown 999:999 /keys/mongo-keyfile
-        chmod 400 /keys/mongo-keyfile
-    volumes:
-      - mongo_keyfile:/keys
-    restart: "no"
-
   mongodb:
     image: mongo:7.0
     container_name: asistente_compras_mongodb
-    depends_on:
-      mongo-keyfile:
-        condition: service_completed_successfully
-    command:
-      [
-        "mongod",
-        "--bind_ip_all",
-        "--replSet",
-        "rs0",
-        "--keyFile",
-        "/etc/mongo/mongo-keyfile",
-        "--auth",
-      ]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}
     ports:
       - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
-      - mongo_keyfile:/etc/mongo
     restart: unless-stopped
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "mongosh --quiet --eval \"db.adminCommand({ping: 1}).ok\" localhost:27017/test | grep 1",
+          "mongosh --quiet --host 127.0.0.1 --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand({ping:1}).ok' | grep 1",
         ]
       interval: 5s
       timeout: 5s
-      retries: 20
-
-  # Inicializa el replica set, crea root y luego los roles/usuarios nativos.
-  # Comparte la red de mongodb para usar la excepción de localhost en el
-  # primer arranque (crear el primer usuario).
-  mongo-init:
-    image: mongo:7.0
-    container_name: asistente_compras_mongo_init
-    network_mode: "service:mongodb"
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    environment:
-      MONGO_ROOT_USER: ${MONGO_ROOT_USER:-root}
-      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}
-      MONGO_APP_USER: ${MONGO_APP_USER:-app_asistente}
-      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}
-      MONGO_DEMO_PASSWORD: ${MONGO_DEMO_PASSWORD:-DemoPass2026}
-      MONGO_REPLICA_HOST: ${MONGO_REPLICA_HOST:-mongodb:27017}
-      MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
-      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
-      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
-      WAREHOUSES: ${WAREHOUSES:-}
-    volumes:
-      - ./infrastructure/mongodb/init:/scripts:ro
-    entrypoint: ["bash", "-c"]
-    command:
-      - |
-        set -e
-        until mongosh --quiet --host 127.0.0.1:27017 \
-          --eval 'db.adminCommand({ping: 1})' >/dev/null 2>&1; do
-          sleep 1
-        done
-        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/00_replica_y_root.js
-        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/10_seguridad.js
-    restart: "no"
+      retries: 30
 
   app:
     build:
       context: .
-    container_name: asistente_compras_api
+    container_name: asistente_compras_app
     environment:
-      MONGODB_URI: mongodb://${MONGO_APP_USER:-app_asistente}:${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}@mongodb:27017/?replicaSet=rs0&authSource=admin
-      ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
-      MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
-      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
-      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
-      WAREHOUSES: ${WAREHOUSES:-}
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}@mongodb:27017/?authSource=admin
+      MONGODB_DB: ${MONGODB_DB:-asistente_compras}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Define ADMIN_EMAIL en .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env}
+      ADMIN_NOMBRE: ${ADMIN_NOMBRE:-Administrador de la aplicación}
       MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-3600}
@@ -107,50 +39,9 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      mongo-init:
-        condition: service_completed_successfully
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
-
-  listener:
-    build:
-      context: .
-    container_name: asistente_compras_listener
-    environment:
-      MONGODB_URI: mongodb://${MONGO_APP_USER:-app_asistente}:${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}@mongodb:27017/?replicaSet=rs0&authSource=admin
-      ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
-      MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
-      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
-      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
-      WAREHOUSES: ${WAREHOUSES:-}
-      MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    command: ["python", "scripts/run_listener.py"]
-    # El healthcheck de la imagen apunta al puerto 8000 de la API.
-    healthcheck:
-      disable: true
-    depends_on:
-      mongo-init:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  seed:
-    build:
-      context: .
-    profiles: ["tools"]
-    environment:
-      MONGODB_URI: mongodb://${MONGO_APP_USER:-app_asistente}:${MONGO_APP_PASSWORD:?Define MONGO_APP_PASSWORD en .env}@mongodb:27017/?replicaSet=rs0&authSource=admin
-      ADMIN_CLAVE: ${ADMIN_CLAVE:?Define ADMIN_CLAVE en .env o en el entorno}
-      MONGODB_DB_PREFIX: ${MONGODB_DB_PREFIX:-warehouse}
-      MONGODB_COMPARADOR_DB: ${MONGODB_COMPARADOR_DB:-comparador}
-      MONGODB_SEGURIDAD_DB: ${MONGODB_SEGURIDAD_DB:-seguridad}
-      WAREHOUSES: ${WAREHOUSES:-}
-      MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
-    command: ["python", "scripts/seed_mongodb.py", "--archivo", "productos_ejemplo.csv"]
-    depends_on:
-      mongo-init:
-        condition: service_completed_successfully
-    restart: "no"
 
 volumes:
   mongo_data:
-  mongo_keyfile:

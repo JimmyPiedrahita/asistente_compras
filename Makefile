@@ -3,7 +3,7 @@ PIP ?= .venv/bin/pip
 RUFF ?= .venv/bin/ruff
 NPM ?= npm
 
-.PHONY: install install-dev test lint format openapi seed listener reconcile docker-up docker-down docker-seed docker-reconcile rbac-test frontend-install frontend-dev frontend-build
+.PHONY: install install-dev test test-unit test-integration lint format openapi docker-up docker-down docker-logs frontend-install frontend-dev frontend-build
 
 install:
 	$(PIP) install -r requirements.txt
@@ -12,7 +12,13 @@ install-dev:
 	$(PIP) install -r requirements-dev.txt
 
 test:
-	$(PYTHON) -m unittest discover -s tests -t . -v
+	$(PYTHON) -m pytest tests -q
+
+test-unit:
+	$(PYTHON) -m pytest tests/unit -q
+
+test-integration:
+	$(PYTHON) -m pytest tests/integration -q
 
 lint:
 	$(RUFF) check .
@@ -25,32 +31,17 @@ format:
 openapi:
 	$(PYTHON) scripts/exportar_openapi.py
 
-seed:
-	$(PYTHON) scripts/seed_mongodb.py
-
-listener:
-	$(PYTHON) scripts/run_listener.py
-
-reconcile:
-	$(PYTHON) scripts/reconciliar_comparador.py
-
 docker-up:
 	docker compose up -d --build
 
 docker-down:
 	docker compose down
 
-docker-seed:
-	docker compose --profile tools run --rm seed
-
-docker-reconcile:
-	docker compose exec listener python scripts/reconciliar_comparador.py
-
-rbac-test:
-	bash scripts/verificar_rbac_mongodb.sh
+docker-logs:
+	docker compose logs -f
 
 frontend-install:
-	cd frontend && $(NPM) install
+	cd frontend && $(NPM) ci
 
 frontend-dev:
 	cd frontend && $(NPM) run dev

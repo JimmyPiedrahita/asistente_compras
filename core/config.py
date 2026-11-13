@@ -1,4 +1,9 @@
-"""Configuración de la aplicación leída desde variables de entorno."""
+"""Configuración de la aplicación leída desde variables de entorno.
+
+La aplicación usa una única base de datos MongoDB. Los almacenes, productos,
+usuarios, cupones y compras son documentos dentro de esa base; no hay bases
+por almacén ni proyecciones antiguas.
+"""
 
 from __future__ import annotations
 
@@ -7,30 +12,19 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from email_validator import EmailNotValidError, validate_email
+
 from .errors import ConfiguracionInvalida
 
-_PREFIJO_VALIDO = re.compile(r"^[A-Za-z0-9_-]+$")
 _NOMBRE_BASE_VALIDO = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-@dataclass(frozen=True)
-class AlmacenConfig:
-    """Identidad lógica y base de datos de un almacén."""
-
-    id: int
-    nombre: str
-    base_datos: str
-
-
-def crear_almacenes(prefijo: str = "warehouse") -> tuple[AlmacenConfig, ...]:
-    return tuple(
-        AlmacenConfig(
-            id=id_almacen,
-            nombre=f"Almacen {id_almacen}",
-            base_datos=f"{prefijo}_{id_almacen}",
-        )
-        for id_almacen in (1, 2, 3)
-    )
+def _email_valido(email: str) -> bool:
+    try:
+        validate_email(str(email or "").strip(), check_deliverability=False)
+        return True
+    except EmailNotValidError:
+        return False
 
 
 def _leer_int(
@@ -52,97 +46,33 @@ def _leer_int(
     return numero
 
 
-def _parsear_almacenes(entorno: Mapping[str, str], prefijo: str) -> tuple[AlmacenConfig, ...]:
-    crudo = (entorno.get("WAREHOUSES") or "").strip()
-    if not crudo:
-        return crear_almacenes(prefijo)
-
-    almacenes: list[AlmacenConfig] = []
-    for parte in crudo.split(","):
-        parte = parte.strip()
-        if not parte:
-            continue
-        if ":" in parte:
-            id_crudo, nombre = parte.split(":", 1)
-            nombre = nombre.strip()
-        else:
-            id_crudo, nombre = parte, ""
-        try:
-            id_almacen = int(id_crudo.strip())
-        except ValueError as error:
-            raise ConfiguracionInvalida(
-                "WAREHOUSES debe usar el formato 1:Nombre,2:Nombre"
-            ) from error
-        if id_almacen < 1:
-            raise ConfiguracionInvalida("Los ids de WAREHOUSES deben ser positivos")
-        almacenes.append(
-            AlmacenConfig(
-                id=id_almacen,
-                nombre=nombre or f"Almacen {id_almacen}",
-                base_datos=f"{prefijo}_{id_almacen}",
-            )
-        )
-
-    if not almacenes:
-        raise ConfiguracionInvalida("WAREHOUSES no contiene almacenes válidos")
-    if len({almacen.id for almacen in almacenes}) != len(almacenes):
-        raise ConfiguracionInvalida("WAREHOUSES contiene ids duplicados")
-    return tuple(almacenes)
-
-
 @dataclass(frozen=True)
 class Settings:
     """Configuración inmutable de la aplicación."""
 
     mongodb_uri: str
-    admin_clave: str
-    mongodb_db_prefix: str = "warehouse"
-    mongodb_comparador_db: str = "comparador"
-    mongodb_seguridad_db: str = "seguridad"
+    mongodb_db: str = "asistente_compras"
+    admin_email: str = ""
+    admin_password: str = ""
+    admin_nombre: str = "Administrador de la aplicación"
     mongodb_timeout_ms: int = 5000
-    cors_origins: tuple[str, ...] = ("http://localhost:3000",)
+    cors_origins: tuple[str, ...] = ("http://localhost:3000", "http://localhost:5173")
     session_ttl_seconds: int = 3600
     max_sessions: int = 1000
     max_csv_bytes: int = 1_000_000
     log_level: str = "INFO"
-    almacenes: tuple[AlmacenConfig, ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.mongodb_uri or not self.mongodb_uri.strip():
             raise ConfiguracionInvalida("MONGODB_URI es obligatoria")
-        if not self.admin_clave or len(self.admin_clave) < 8:
-            raise ConfiguracionInvalida("ADMIN_CLAVE debe tener al menos 8 caracteres")
-        if not _PREFIJO_VALIDO.match(self.mongodb_db_prefix):
+        if not _NOMBRE_BASE_VALIDO.match(self.mongodb_db):
             raise ConfiguracionInvalida(
-                "MONGODB_DB_PREFIX solo admite letras, números, guion y guion bajo"
+                "MONGODB_DB solo admite letras, números, guion y guion bajo"
             )
-        if not _NOMBRE_BASE_VALIDO.match(self.mongodb_comparador_db):
-            raise ConfiguracionInvalida(
-                "MONGODB_COMPARADOR_DB solo admite letras, números, guion y guion bajo"
-            )
-        if not _NOMBRE_BASE_VALIDO.match(self.mongodb_seguridad_db):
-            raise ConfiguracionInvalida(
-                "MONGODB_SEGURIDAD_DB solo admite letras, números, guion y guion bajo"
-            )
-        if self.mongodb_seguridad_db == self.mongodb_comparador_db:
-            raise ConfiguracionInvalida(
-                "MONGODB_SEGURIDAD_DB no puede coincidir con MONGODB_COMPARADOR_DB"
-            )
-        if self.almacenes is None:
-            object.__setattr__(self, "almacenes", crear_almacenes(self.mongodb_db_prefix))
-        if not self.almacenes:
-            raise ConfiguracionInvalida("Debe configurarse al menos un almacén")
-        if any(almacen.base_datos == self.mongodb_comparador_db for almacen in self.almacenes):
-            raise ConfiguracionInvalida(
-                "MONGODB_COMPARADOR_DB no puede coincidir con la base de un almacén"
-            )
-        if any(almacen.base_datos == self.mongodb_seguridad_db for almacen in self.almacenes):
-            raise ConfiguracionInvalida(
-                "MONGODB_SEGURIDAD_DB no puede coincidir con la base de un almacén"
-            )
-        ids = [almacen.id for almacen in self.almacenes]
-        if len(set(ids)) != len(ids):
-            raise ConfiguracionInvalida("Los ids de almacén no pueden repetirse")
+        if not self.admin_email or not _email_valido(self.admin_email):
+            raise ConfiguracionInvalida("ADMIN_EMAIL es obligatoria y debe ser un correo válido")
+        if not self.admin_password or len(self.admin_password) < 8:
+            raise ConfiguracionInvalida("ADMIN_PASSWORD debe tener al menos 8 caracteres")
         if self.mongodb_timeout_ms < 100:
             raise ConfiguracionInvalida("MONGODB_TIMEOUT_MS debe ser al menos 100")
         if self.session_ttl_seconds < 1:
@@ -165,34 +95,39 @@ class Settings:
         if not uri:
             raise ConfiguracionInvalida("MONGODB_URI es obligatoria para iniciar la API")
 
-        admin_clave = env.get("ADMIN_CLAVE", "").strip()
-        if not admin_clave:
+        admin_email = env.get("ADMIN_EMAIL", "").strip().lower()
+        admin_password = env.get("ADMIN_PASSWORD", "").strip()
+        if not admin_email:
             raise ConfiguracionInvalida(
-                "ADMIN_CLAVE es obligatoria; no se admite una clave por defecto"
+                "ADMIN_EMAIL es obligatoria para crear la cuenta inicial del administrador"
+            )
+        if not admin_password:
+            raise ConfiguracionInvalida(
+                "ADMIN_PASSWORD es obligatoria para crear la cuenta inicial del administrador"
             )
 
-        prefijo = env.get("MONGODB_DB_PREFIX", "warehouse").strip() or "warehouse"
-        comparador = env.get("MONGODB_COMPARADOR_DB", "comparador").strip() or "comparador"
-        seguridad = env.get("MONGODB_SEGURIDAD_DB", "seguridad").strip() or "seguridad"
+        base_datos = env.get("MONGODB_DB", "asistente_compras").strip() or "asistente_compras"
         origenes = tuple(
             origen.strip()
-            for origen in env.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+            for origen in env.get(
+                "CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"
+            ).split(",")
             if origen.strip()
         )
 
         return cls(
             mongodb_uri=uri,
-            admin_clave=admin_clave,
-            mongodb_db_prefix=prefijo,
-            mongodb_comparador_db=comparador,
-            mongodb_seguridad_db=seguridad,
+            mongodb_db=base_datos,
+            admin_email=admin_email,
+            admin_password=admin_password,
+            admin_nombre=env.get("ADMIN_NOMBRE", "Administrador de la aplicación").strip()
+            or "Administrador de la aplicación",
             mongodb_timeout_ms=_leer_int(env, "MONGODB_TIMEOUT_MS", 5000, minimo=100),
             cors_origins=origenes,
             session_ttl_seconds=_leer_int(env, "SESSION_TTL_SECONDS", 3600),
             max_sessions=_leer_int(env, "MAX_SESSIONS", 1000),
             max_csv_bytes=_leer_int(env, "MAX_CSV_BYTES", 1_000_000),
             log_level=env.get("LOG_LEVEL", "INFO").strip() or "INFO",
-            almacenes=_parsear_almacenes(env, prefijo),
         )
 
     @classmethod
@@ -200,12 +135,14 @@ class Settings:
         cls,
         *,
         mongodb_uri: str = "mongodb://pruebas",
-        admin_clave: str = "admin123",
+        admin_email: str = "admin@example.com",
+        admin_password: str = "admin12345",
         **cambios: object,
     ) -> Settings:
         datos: dict[str, object] = {
             "mongodb_uri": mongodb_uri,
-            "admin_clave": admin_clave,
+            "admin_email": admin_email,
+            "admin_password": admin_password,
             "cors_origins": (),
             "log_level": "CRITICAL",
         }
@@ -213,4 +150,4 @@ class Settings:
         return cls(**datos)  # type: ignore[arg-type]
 
 
-__all__ = ["AlmacenConfig", "Settings", "crear_almacenes"]
+__all__ = ["Settings"]
