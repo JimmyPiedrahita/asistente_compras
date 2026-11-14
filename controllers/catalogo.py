@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Any
 
 from core.errors import SolicitudInvalida
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from infrastructure.mongodb.global_db import RepositorioCatalogoGlobal
 from models.productos import Producto
 from models.texto import normalizar_texto
 
@@ -16,7 +16,7 @@ MODOS = {"catalogo", "mejor_precio", "global"}
 
 
 class ControladorCatalogo:
-    def __init__(self, repositorio: RepositorioMongo) -> None:
+    def __init__(self, repositorio: RepositorioCatalogoGlobal) -> None:
         self.repo = repositorio
 
     # Lista de compras --------------------------------------------------

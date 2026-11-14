@@ -23,6 +23,7 @@ class Sesion:
     telefono: str | None = None
     direccion: str | None = None
     ciudad: str | None = None
+    autoriza_datos: bool = False
     carrito: Carrito = field(default_factory=Carrito)
     lista: list[str] = field(default_factory=list)
     creada_en: float = 0.0
@@ -72,6 +73,7 @@ class RegistroSesiones:
                 telefono=usuario.telefono,
                 direccion=usuario.direccion,
                 ciudad=usuario.ciudad,
+                autoriza_datos=usuario.autoriza_datos,
                 creada_en=ahora,
                 ultimo_acceso=ahora,
             )

@@ -2,8 +2,12 @@ PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
 RUFF ?= .venv/bin/ruff
 NPM ?= npm
+COMPOSE ?= docker compose
 
-.PHONY: install install-dev test test-unit test-integration lint format openapi docker-up docker-down docker-logs frontend-install frontend-dev frontend-build
+.PHONY: install install-dev test test-unit test-integration lint format openapi \
+	docker-up docker-down docker-logs docker-init listener rbac-test \
+	reconciliar reconciliar-catalogo reconciliar-compras rotar-secretos reset \
+	frontend-install frontend-dev frontend-build
 
 install:
 	$(PIP) install -r requirements.txt
@@ -32,13 +36,37 @@ openapi:
 	$(PYTHON) scripts/exportar_openapi.py
 
 docker-up:
-	docker compose up -d --build
+	$(COMPOSE) up -d --build
 
 docker-down:
-	docker compose down
+	$(COMPOSE) down
 
 docker-logs:
-	docker compose logs -f
+	$(COMPOSE) logs -f
+
+docker-init:
+	$(COMPOSE) run --rm mongo-init
+
+listener:
+	$(PYTHON) scripts/run_listener.py
+
+rbac-test:
+	$(COMPOSE) run --rm tools python scripts/verificar_rbac.py
+
+reconciliar: reconciliar-catalogo reconciliar-compras
+
+reconciliar-catalogo:
+	$(COMPOSE) run --rm tools python scripts/reconciliar_catalogo.py
+
+reconciliar-compras:
+	$(COMPOSE) run --rm tools python scripts/reconciliar_compras.py
+
+rotar-secretos:
+	$(COMPOSE) run --rm tools python scripts/rotar_secretos_almacenes.py
+
+# Borra todos los datos de MongoDB. Úsalo solo en desarrollo.
+reset:
+	$(COMPOSE) down -v
 
 frontend-install:
 	cd frontend && $(NPM) ci

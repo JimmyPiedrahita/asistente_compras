@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from controllers.sesiones import RegistroSesiones
 from core.config import Settings
 from core.logging import configurar_logging, obtener_logger
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from infrastructure.mongodb.contexto import ContextoAplicacion, construir_contexto
 
 from .errors import registrar_manejadores
 from .routers import ROUTERS
@@ -28,22 +28,13 @@ _DIR_FRONTEND = _RAIZ / "frontend" / "dist"
 def create_app(
     settings: Settings | None = None,
     *,
-    repositorio: RepositorioMongo | None = None,
+    contexto: ContextoAplicacion | None = None,
 ) -> FastAPI:
     if settings is None:
         settings = Settings.from_env()
 
     configurar_logging(settings.log_level)
-    repo = repositorio or RepositorioMongo(
-        settings.mongodb_uri,
-        base_datos=settings.mongodb_db,
-        timeout_ms=settings.mongodb_timeout_ms,
-    )
-    repo.inicializar(
-        admin_email=settings.admin_email,
-        admin_password=settings.admin_password,
-        admin_nombre=settings.admin_nombre,
-    )
+    contexto = contexto or construir_contexto(settings)
     sesiones = RegistroSesiones(
         ttl_seconds=settings.session_ttl_seconds,
         max_sesiones=settings.max_sessions,
@@ -51,18 +42,22 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        logger.info("API iniciada; base MongoDB: %s", settings.mongodb_db)
+        logger.info(
+            "API iniciada; base global: %s (modo pruebas: %s)",
+            settings.mongodb_global_db,
+            settings.modo_pruebas,
+        )
         try:
             yield
         finally:
             try:
-                repo.close()
+                contexto.cerrar()
             except Exception:  # pragma: no cover - cierre defensivo
-                logger.exception("No se pudo cerrar la conexión con MongoDB")
+                logger.exception("No se pudieron cerrar las conexiones con MongoDB")
 
     app = FastAPI(
         title="Asistente de Compras API",
-        version="4.0.0",
+        version="5.0.0",
         description=(
             "Aplicación web de compras y comparación de productos entre almacenes. "
             "Incluye registro de clientes, búsqueda con filtros, carrito, cupones "
@@ -83,7 +78,7 @@ def create_app(
             },
         ],
     )
-    app.state.repositorio = repo
+    app.state.contexto = contexto
     app.state.sesiones = sesiones
     app.state.settings = settings
 

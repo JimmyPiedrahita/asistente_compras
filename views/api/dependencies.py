@@ -1,22 +1,22 @@
-"""Dependencias FastAPI de sesión, roles y repositorio."""
+"""Dependencias FastAPI de sesión, roles y repositorios por rol."""
 
 from __future__ import annotations
 
 from fastapi import Depends, Header, Request
 
-from controllers.administracion import ControladorAdministracion
+from controllers.administracion import ControladorAdminAlmacen, ControladorAdminApp
 from controllers.autenticacion import ControladorAutenticacion
 from controllers.carrito import ControladorCarrito
 from controllers.catalogo import ControladorCatalogo
-from controllers.compras import ControladorCompras
+from controllers.compras import ControladorComprasAlmacen, ControladorComprasCliente
 from controllers.sesiones import RegistroSesiones, Sesion
 from core.errors import NoPermitido, SesionInvalida
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from infrastructure.mongodb.contexto import ContextoAplicacion
 from models.permisos import ADMINISTRADOR_ALMACEN, ADMINISTRADOR_APP, CLIENTE
 
 
-def obtener_repositorio(request: Request) -> RepositorioMongo:
-    return request.app.state.repositorio
+def obtener_contexto(request: Request) -> ContextoAplicacion:
+    return request.app.state.contexto
 
 
 def obtener_registro(request: Request) -> RegistroSesiones:
@@ -39,36 +39,39 @@ def obtener_sesion(
 
 
 def obtener_autenticacion(
-    repo: RepositorioMongo = Depends(obtener_repositorio),
+    contexto: ContextoAplicacion = Depends(obtener_contexto),
     registro: RegistroSesiones = Depends(obtener_registro),
 ) -> ControladorAutenticacion:
-    return ControladorAutenticacion(repo, registro)
+    return ControladorAutenticacion(contexto.repo_usuarios, registro)
 
 
 def obtener_catalogo(
-    repo: RepositorioMongo = Depends(obtener_repositorio),
+    contexto: ContextoAplicacion = Depends(obtener_contexto),
 ) -> ControladorCatalogo:
-    return ControladorCatalogo(repo)
+    return ControladorCatalogo(contexto.repo_catalogo)
 
 
 def obtener_carrito(
-    repo: RepositorioMongo = Depends(obtener_repositorio),
+    contexto: ContextoAplicacion = Depends(obtener_contexto),
 ) -> ControladorCarrito:
-    return ControladorCarrito(repo)
+    return ControladorCarrito(contexto.repo_catalogo)
 
 
-def obtener_compras(
-    repo: RepositorioMongo = Depends(obtener_repositorio),
+def obtener_compras_cliente(
+    contexto: ContextoAplicacion = Depends(obtener_contexto),
     carrito: ControladorCarrito = Depends(obtener_carrito),
-) -> ControladorCompras:
-    return ControladorCompras(repo, carrito)
+) -> ControladorComprasCliente:
+    return ControladorComprasCliente(contexto.repo_compras, carrito)
 
 
-def obtener_administracion(
-    request: Request,
-    repo: RepositorioMongo = Depends(obtener_repositorio),
-) -> ControladorAdministracion:
-    return ControladorAdministracion(repo, max_csv_bytes=request.app.state.settings.max_csv_bytes)
+def obtener_admin_app(
+    contexto: ContextoAplicacion = Depends(obtener_contexto),
+) -> ControladorAdminApp:
+    return ControladorAdminApp(
+        contexto.repo_almacenes,
+        contexto.repo_usuarios,
+        contexto.aprovisionamiento,
+    )
 
 
 def _exigir_rol(sesion: Sesion, rol: str) -> Sesion:
@@ -89,14 +92,36 @@ def requerir_admin_app(sesion: Sesion = Depends(obtener_sesion)) -> Sesion:
     return _exigir_rol(sesion, ADMINISTRADOR_APP)
 
 
+def obtener_admin_almacen(
+    sesion: Sesion = Depends(requerir_admin_almacen),
+    contexto: ContextoAplicacion = Depends(obtener_contexto),
+) -> ControladorAdminAlmacen:
+    repositorio = contexto.directorio.repositorio(sesion.almacen_id or "")
+    return ControladorAdminAlmacen(
+        repositorio,
+        contexto.validador,
+        max_csv_bytes=contexto.settings.max_csv_bytes,
+    )
+
+
+def obtener_compras_almacen(
+    sesion: Sesion = Depends(requerir_admin_almacen),
+    contexto: ContextoAplicacion = Depends(obtener_contexto),
+) -> ControladorComprasAlmacen:
+    repositorio = contexto.directorio.repositorio(sesion.almacen_id or "")
+    return ControladorComprasAlmacen(repositorio)
+
+
 __all__ = [
-    "obtener_administracion",
+    "obtener_admin_almacen",
+    "obtener_admin_app",
     "obtener_autenticacion",
     "obtener_carrito",
     "obtener_catalogo",
-    "obtener_compras",
+    "obtener_compras_almacen",
+    "obtener_compras_cliente",
+    "obtener_contexto",
     "obtener_registro",
-    "obtener_repositorio",
     "obtener_sesion",
     "requerir_admin_almacen",
     "requerir_admin_app",

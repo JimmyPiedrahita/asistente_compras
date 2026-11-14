@@ -4,16 +4,21 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from infrastructure.mongodb.contexto import ContextoAplicacion
 
-from ..dependencies import obtener_repositorio
+from ..dependencies import obtener_contexto
 
 router = APIRouter(tags=["Salud"])
 
 
+def _verificar(contexto: ContextoAplicacion) -> None:
+    contexto.conexiones.ping(contexto.fabrica.uri_auth())
+    contexto.conexiones.ping(contexto.fabrica.uri_admin_app())
+
+
 @router.get("/health")
-def health(repo: RepositorioMongo = Depends(obtener_repositorio)) -> dict[str, str]:
-    repo.ping()
+def health(contexto: ContextoAplicacion = Depends(obtener_contexto)) -> dict[str, str]:
+    _verificar(contexto)
     return {"status": "ok", "database": "ok"}
 
 
@@ -23,8 +28,8 @@ def health_live() -> dict[str, str]:
 
 
 @router.get("/health/ready")
-def health_ready(repo: RepositorioMongo = Depends(obtener_repositorio)) -> dict[str, str]:
-    repo.ping()
+def health_ready(contexto: ContextoAplicacion = Depends(obtener_contexto)) -> dict[str, str]:
+    _verificar(contexto)
     return {"status": "ready", "database": "ok"}
 
 

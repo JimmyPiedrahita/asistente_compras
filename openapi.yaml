@@ -4,7 +4,7 @@ info:
   description: Aplicación web de compras y comparación de productos entre almacenes.
     Incluye registro de clientes, búsqueda con filtros, carrito, cupones por almacén
     y pagos.
-  version: 4.0.0
+  version: 5.0.0
 servers:
 - url: http://localhost:8000
   description: Servidor local

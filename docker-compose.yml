@@ -1,47 +1,181 @@
+x-credenciales-mongo: &credenciales-mongo
+  MONGODB_HOST: ${MONGODB_HOST:-mongodb:27017}
+  MONGODB_REPLICA_SET: ${MONGODB_REPLICA_SET:-rs0}
+  MONGODB_AUTH_SOURCE: ${MONGODB_AUTH_SOURCE:-admin}
+  MONGODB_GLOBAL_DB: ${MONGODB_GLOBAL_DB:-global_asistente_compras}
+  MONGODB_ALMACEN_PREFIX: ${MONGODB_ALMACEN_PREFIX:-almacen_}
+  MONGODB_WAREHOUSE_SECRET: ${MONGODB_WAREHOUSE_SECRET:?Define MONGODB_WAREHOUSE_SECRET en .env}
+  MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
+  MONGO_CLIENTE_USER: ${MONGO_CLIENTE_USER:-cliente_app}
+  MONGO_CLIENTE_PASSWORD: ${MONGO_CLIENTE_PASSWORD:?Define MONGO_CLIENTE_PASSWORD en .env}
+  MONGO_ADMIN_APP_USER: ${MONGO_ADMIN_APP_USER:-admin_app}
+  MONGO_ADMIN_APP_PASSWORD: ${MONGO_ADMIN_APP_PASSWORD:?Define MONGO_ADMIN_APP_PASSWORD en .env}
+  MONGO_AUTH_USER: ${MONGO_AUTH_USER:-auth_service}
+  MONGO_AUTH_PASSWORD: ${MONGO_AUTH_PASSWORD:?Define MONGO_AUTH_PASSWORD en .env}
+  MONGO_VALIDADOR_USER: ${MONGO_VALIDADOR_USER:-validador_catalogo}
+  MONGO_VALIDADOR_PASSWORD: ${MONGO_VALIDADOR_PASSWORD:?Define MONGO_VALIDADOR_PASSWORD en .env}
+  MONGO_CATALOGO_USER: ${MONGO_CATALOGO_USER:-replicador_catalogo}
+  MONGO_CATALOGO_PASSWORD: ${MONGO_CATALOGO_PASSWORD:?Define MONGO_CATALOGO_PASSWORD en .env}
+  MONGO_COMPRAS_USER: ${MONGO_COMPRAS_USER:-proyector_compras}
+  MONGO_COMPRAS_PASSWORD: ${MONGO_COMPRAS_PASSWORD:?Define MONGO_COMPRAS_PASSWORD en .env}
+  MONGO_PROVISIONER_USER: ${MONGO_PROVISIONER_USER:-provisioner}
+  MONGO_PROVISIONER_PASSWORD: ${MONGO_PROVISIONER_PASSWORD:?Define MONGO_PROVISIONER_PASSWORD en .env}
+
+x-entorno-app: &entorno-app
+  <<: *credenciales-mongo
+  ADMIN_EMAIL: ${ADMIN_EMAIL:?Define ADMIN_EMAIL en .env}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env}
+  ADMIN_NOMBRE: ${ADMIN_NOMBRE:-Administrador de la aplicación}
+  LISTENER_REFRESH_SECONDS: ${LISTENER_REFRESH_SECONDS:-15}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+  SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-3600}
+  MAX_SESSIONS: ${MAX_SESSIONS:-1000}
+  MAX_CSV_BYTES: ${MAX_CSV_BYTES:-1000000}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
 services:
+  # Genera el keyfile del replica set una sola vez y lo guarda en un volumen.
+  # Con --auth, MongoDB exige keyfile para la autenticación interna del RS.
+  mongo-keyfile:
+    image: mongo:7.0
+    container_name: asistente_compras_mongo_keyfile
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -e
+        if [ ! -s /keys/mongo-keyfile ]; then
+          openssl rand -base64 756 > /keys/mongo-keyfile
+          echo "Keyfile generado"
+        else
+          echo "Keyfile existente"
+        fi
+        chown 999:999 /keys/mongo-keyfile
+        chmod 400 /keys/mongo-keyfile
+    volumes:
+      - mongo_keyfile:/keys
+    restart: "no"
+
   mongodb:
     image: mongo:7.0
     container_name: asistente_compras_mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-root}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}
+    depends_on:
+      mongo-keyfile:
+        condition: service_completed_successfully
+    command:
+      [
+        "mongod",
+        "--bind_ip_all",
+        "--replSet",
+        "rs0",
+        "--keyFile",
+        "/etc/mongo/mongo-keyfile",
+        "--auth",
+      ]
     ports:
       - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
+      - mongo_keyfile:/etc/mongo
     restart: unless-stopped
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "mongosh --quiet --host 127.0.0.1 --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand({ping:1}).ok' | grep 1",
+          "mongosh --quiet --eval \"db.adminCommand({ping: 1}).ok\" localhost:27017/test | grep 1",
         ]
       interval: 5s
       timeout: 5s
       retries: 30
+
+  # Inicializa el replica set, crea root y luego roles, usuarios e índices.
+  # Comparte la red de mongodb para usar la excepción de localhost en el
+  # primer arranque (crear el primer usuario).
+  mongo-init:
+    image: mongo:7.0
+    container_name: asistente_compras_mongo_init
+    network_mode: "service:mongodb"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_ROOT_USER: ${MONGO_ROOT_USER:-root}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}
+      MONGO_REPLICA_HOST: ${MONGO_REPLICA_HOST:-mongodb:27017}
+      MONGODB_GLOBAL_DB: ${MONGODB_GLOBAL_DB:-global_asistente_compras}
+      MONGO_CLIENTE_USER: ${MONGO_CLIENTE_USER:-cliente_app}
+      MONGO_CLIENTE_PASSWORD: ${MONGO_CLIENTE_PASSWORD:?Define MONGO_CLIENTE_PASSWORD en .env}
+      MONGO_ADMIN_APP_USER: ${MONGO_ADMIN_APP_USER:-admin_app}
+      MONGO_ADMIN_APP_PASSWORD: ${MONGO_ADMIN_APP_PASSWORD:?Define MONGO_ADMIN_APP_PASSWORD en .env}
+      MONGO_AUTH_USER: ${MONGO_AUTH_USER:-auth_service}
+      MONGO_AUTH_PASSWORD: ${MONGO_AUTH_PASSWORD:?Define MONGO_AUTH_PASSWORD en .env}
+      MONGO_VALIDADOR_USER: ${MONGO_VALIDADOR_USER:-validador_catalogo}
+      MONGO_VALIDADOR_PASSWORD: ${MONGO_VALIDADOR_PASSWORD:?Define MONGO_VALIDADOR_PASSWORD en .env}
+      MONGO_CATALOGO_USER: ${MONGO_CATALOGO_USER:-replicador_catalogo}
+      MONGO_CATALOGO_PASSWORD: ${MONGO_CATALOGO_PASSWORD:?Define MONGO_CATALOGO_PASSWORD en .env}
+      MONGO_COMPRAS_USER: ${MONGO_COMPRAS_USER:-proyector_compras}
+      MONGO_COMPRAS_PASSWORD: ${MONGO_COMPRAS_PASSWORD:?Define MONGO_COMPRAS_PASSWORD en .env}
+      MONGO_PROVISIONER_USER: ${MONGO_PROVISIONER_USER:-provisioner}
+      MONGO_PROVISIONER_PASSWORD: ${MONGO_PROVISIONER_PASSWORD:?Define MONGO_PROVISIONER_PASSWORD en .env}
+    volumes:
+      - ./infrastructure/mongodb/init:/scripts:ro
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -e
+        until mongosh --quiet --host 127.0.0.1:27017 \
+          --eval 'db.adminCommand({ping: 1})' >/dev/null 2>&1; do
+          sleep 1
+        done
+        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/00_replica_y_root.js
+        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/10_roles.js
+        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/20_usuarios.js
+        mongosh --quiet --host 127.0.0.1:27017 --file /scripts/30_indices.js
+    restart: "no"
 
   app:
     build:
       context: .
     container_name: asistente_compras_app
     environment:
-      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}@mongodb:27017/?authSource=admin
-      MONGODB_DB: ${MONGODB_DB:-asistente_compras}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:?Define ADMIN_EMAIL en .env}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env}
-      ADMIN_NOMBRE: ${ADMIN_NOMBRE:-Administrador de la aplicación}
-      MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
-      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-3600}
-      MAX_SESSIONS: ${MAX_SESSIONS:-1000}
-      MAX_CSV_BYTES: ${MAX_CSV_BYTES:-1000000}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      <<: *entorno-app
     ports:
       - "8000:8000"
     depends_on:
-      mongodb:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  listener:
+    build:
+      context: .
+    container_name: asistente_compras_listener
+    environment:
+      <<: *entorno-app
+    command: ["python", "scripts/run_listener.py"]
+    # El healthcheck de la imagen apunta al puerto 8000 de la API.
+    healthcheck:
+      disable: true
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  tools:
+    build:
+      context: .
+    profiles: ["tools"]
+    environment:
+      <<: *entorno-app
+      MONGO_ROOT_USER: ${MONGO_ROOT_USER:-root}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD en .env}
+    command: ["python", "-c", "print('Usa docker compose run --rm tools python scripts/...')"]
+    healthcheck:
+      disable: true
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+    restart: "no"
 
 volumes:
   mongo_data:
+  mongo_keyfile:

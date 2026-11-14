@@ -8,8 +8,11 @@ import re
 import uuid
 from typing import Any
 
-from core.errors import NoEncontrado, SolicitudInvalida
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from core.errors import NoEncontrado, NoPermitido, SolicitudInvalida
+from infrastructure.mongodb.almacen import RepositorioAlmacen
+from infrastructure.mongodb.global_db import RepositorioAlmacenes, RepositorioUsuarios
+from infrastructure.mongodb.provisioning import ServicioAprovisionamiento
+from infrastructure.mongodb.validacion import ServicioValidacion
 from models.permisos import ADMINISTRADOR_ALMACEN
 from models.productos import Producto
 
@@ -20,23 +23,30 @@ _CABECERAS_PERMITIDAS = _CABECERAS_OBLIGATORIAS | {"marca_variedad"}
 _PRECIO_VALIDO = re.compile(r"^\d+(?:\.\d+)?$")
 
 
-class ControladorAdministracion:
-    def __init__(self, repositorio: RepositorioMongo, *, max_csv_bytes: int = 1_000_000) -> None:
-        self.repo = repositorio
-        self.max_csv_bytes = int(max_csv_bytes)
+class ControladorAdminApp:
+    """Administrador de la aplicación: almacenes y sus administradores."""
 
-    # Administrador de la aplicación -----------------------------------
+    def __init__(
+        self,
+        almacenes: RepositorioAlmacenes,
+        usuarios: RepositorioUsuarios,
+        aprovisionamiento: ServicioAprovisionamiento,
+    ) -> None:
+        self.almacenes = almacenes
+        self.usuarios = usuarios
+        self.aprovisionamiento = aprovisionamiento
+
     def crear_almacen(self, nombre: str) -> dict[str, Any]:
-        almacen = self.repo.crear_almacen(nombre)
+        almacen = self.aprovisionamiento.crear_almacen(nombre)
         return {**almacen.publico(), "productos": 0}
 
     def listar_almacenes(self) -> list[dict[str, Any]]:
         return [
             {
                 **almacen.publico(),
-                "productos": self.repo.contar_productos(almacen.almacen_id),
+                "productos": self.almacenes.contar_productos(almacen.almacen_id),
             }
-            for almacen in self.repo.listar_almacenes()
+            for almacen in self.almacenes.listar()
         ]
 
     def crear_admin_almacen(
@@ -47,10 +57,10 @@ class ControladorAdministracion:
         password: str,
         almacen_id: str,
     ) -> dict[str, Any]:
-        almacen = self.repo.obtener_almacen(almacen_id)
+        almacen = self.almacenes.obtener(almacen_id)
         if almacen is None:
             raise NoEncontrado("Almacén no encontrado")
-        usuario = self.repo.crear_usuario(
+        usuario = self.usuarios.crear_usuario(
             nombre=nombre,
             email=email,
             password=password,
@@ -60,13 +70,13 @@ class ControladorAdministracion:
         return {**usuario.publico(), "almacen_nombre": almacen.nombre}
 
     def listar_admins_almacen(self) -> list[dict[str, Any]]:
-        almacenes = {a.almacen_id: a.nombre for a in self.repo.listar_almacenes()}
+        almacenes = {a.almacen_id: a.nombre for a in self.almacenes.listar()}
         return [
             {
                 **usuario.publico(),
                 "almacen_nombre": almacenes.get(usuario.almacen_id or "", ""),
             }
-            for usuario in self.repo.listar_administradores_almacen()
+            for usuario in self.usuarios.listar_administradores_almacen()
         ]
 
     def actualizar_credenciales(
@@ -78,24 +88,41 @@ class ControladorAdministracion:
     ) -> dict[str, Any]:
         if email is None and password is None:
             raise SolicitudInvalida("Indica el correo o la contraseña que deseas actualizar")
-        usuario = self.repo.actualizar_credenciales(usuario_id, email=email, password=password)
+        usuario = self.usuarios.actualizar_credenciales(usuario_id, email=email, password=password)
         return usuario.publico()
 
-    # Administrador de almacén: productos -------------------------------
-    @staticmethod
-    def _almacen_de(sesion: Sesion) -> str:
+
+class ControladorAdminAlmacen:
+    """Administrador de almacén: productos, cupones, CSV, compras y estadísticas."""
+
+    def __init__(
+        self,
+        repositorio: RepositorioAlmacen,
+        validador: ServicioValidacion,
+        *,
+        max_csv_bytes: int = 1_000_000,
+    ) -> None:
+        self.repo = repositorio
+        self.validador = validador
+        self.max_csv_bytes = int(max_csv_bytes)
+
+    def _almacen_de(self, sesion: Sesion) -> str:
         if not sesion.almacen_id:
             raise NoEncontrado("La cuenta no tiene un almacén asignado")
-        return sesion.almacen_id
+        if str(sesion.almacen_id) != self.repo.almacen_id:
+            raise NoPermitido("no puedes operar sobre otro almacén", rol=sesion.rol)
+        return self.repo.almacen_id
 
+    # Productos ---------------------------------------------------------
     def listar_productos(self, sesion: Sesion) -> list[dict[str, Any]]:
-        almacen_id = self._almacen_de(sesion)
-        return [producto.publico() for producto in self.repo.listar_todos_productos(almacen_id)]
+        self._almacen_de(sesion)
+        return [producto.publico() for producto in self.repo.listar_todos_productos()]
 
     def crear_producto(self, sesion: Sesion, datos: dict[str, Any]) -> dict[str, Any]:
         almacen_id = self._almacen_de(sesion)
         try:
-            producto = self.repo.crear_producto(
+            producto = Producto.crear(
+                producto_id=uuid.uuid4().hex,
                 almacen_id=almacen_id,
                 tipo_producto=str(datos.get("tipo_producto") or ""),
                 nombre=str(datos.get("nombre") or ""),
@@ -105,21 +132,42 @@ class ControladorAdministracion:
             )
         except ValueError as error:
             raise SolicitudInvalida(str(error)) from error
+        locales = self.repo.presentaciones_del_tipo(producto.tipo_normalizado)
+        self.validador.validar_presentacion(producto, locales=locales)
+        self.repo.insertar_producto(producto)
         return producto.publico()
 
     def actualizar_producto(
         self, sesion: Sesion, producto_id: str, cambios: dict[str, Any]
     ) -> dict[str, Any]:
         almacen_id = self._almacen_de(sesion)
+        actual = self.repo.obtener_producto(producto_id)
+        if actual is None:
+            raise NoEncontrado("Producto no encontrado")
+        datos = {
+            "tipo_producto": cambios.get("tipo_producto", actual.tipo_producto),
+            "nombre": cambios.get("nombre", actual.nombre),
+            "marca_variedad": cambios.get("marca_variedad", actual.marca_variedad),
+            "precio": cambios.get("precio", actual.precio),
+            "presentacion": cambios.get("presentacion", actual.presentacion),
+        }
         try:
-            producto = self.repo.actualizar_producto(producto_id, almacen_id, cambios)
+            actualizado = Producto.crear(
+                producto_id=actual.producto_id,
+                almacen_id=almacen_id,
+                **datos,
+            )
         except ValueError as error:
             raise SolicitudInvalida(str(error)) from error
-        return producto.publico()
+        actualizado.creado_en = actual.creado_en
+        locales = self.repo.presentaciones_del_tipo(actualizado.tipo_normalizado)
+        self.validador.validar_presentacion(actualizado, locales=locales, excluir_id=producto_id)
+        self.repo.guardar_producto(actualizado)
+        return actualizado.publico()
 
     def eliminar_producto(self, sesion: Sesion, producto_id: str) -> None:
-        almacen_id = self._almacen_de(sesion)
-        self.repo.eliminar_producto(producto_id, almacen_id)
+        self._almacen_de(sesion)
+        self.repo.eliminar_producto(producto_id)
 
     def importar_csv(self, sesion: Sesion, contenido: str) -> dict[str, Any]:
         almacen_id = self._almacen_de(sesion)
@@ -202,7 +250,9 @@ class ControladorAdministracion:
 
             tipo_norm = " ".join(tipo.casefold().split())
             if tipo_norm not in existentes:
-                existentes[tipo_norm] = self.repo.presentaciones_del_tipo(tipo_norm)
+                existentes[tipo_norm] = self.validador.presentaciones_del_tipo(
+                    tipo_norm, locales=self.repo.presentaciones_del_tipo(tipo_norm)
+                )
             presentacion_norm = " ".join(presentacion.casefold().split())
             estandar_existente = sorted(existentes[tipo_norm]) if existentes[tipo_norm] else []
             if estandar_existente and presentacion_norm not in estandar_existente:
@@ -255,19 +305,27 @@ class ControladorAdministracion:
         importados = self.repo.insertar_productos_validados(productos)
         return {"importados": importados, "errores": []}
 
-    # Administrador de almacén: cupones --------------------------------
+    # Cupones -----------------------------------------------------------
     def listar_cupones(self, sesion: Sesion) -> list[dict[str, Any]]:
-        almacen_id = self._almacen_de(sesion)
-        return [cupon.publico() for cupon in self.repo.listar_cupones(almacen_id)]
+        self._almacen_de(sesion)
+        return [cupon.publico() for cupon in self.repo.listar_cupones()]
 
     def crear_cupon(self, sesion: Sesion, codigo: str, porcentaje: float) -> dict[str, Any]:
-        almacen_id = self._almacen_de(sesion)
-        cupon = self.repo.crear_cupon(codigo=codigo, almacen_id=almacen_id, porcentaje=porcentaje)
+        self._almacen_de(sesion)
+        self.validador.validar_cupon_unico(codigo)
+        cupon = self.repo.crear_cupon(codigo=codigo, porcentaje=porcentaje)
         return cupon.publico()
 
     def eliminar_cupon(self, sesion: Sesion, cupon_id: str) -> None:
-        almacen_id = self._almacen_de(sesion)
-        self.repo.eliminar_cupon(cupon_id, almacen_id)
+        self._almacen_de(sesion)
+        self.repo.eliminar_cupon(cupon_id)
 
 
-__all__ = ["ControladorAdministracion"]
+# Compatibilidad con importaciones antiguas.
+ControladorAdministracion = ControladorAdminApp
+
+__all__ = [
+    "ControladorAdminAlmacen",
+    "ControladorAdminApp",
+    "ControladorAdministracion",
+]

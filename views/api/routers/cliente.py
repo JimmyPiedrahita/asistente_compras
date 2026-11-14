@@ -6,13 +6,13 @@ from fastapi import APIRouter, Depends
 
 from controllers.carrito import ControladorCarrito
 from controllers.catalogo import ControladorCatalogo
-from controllers.compras import ControladorCompras
+from controllers.compras import ControladorComprasCliente
 from controllers.sesiones import Sesion
 
 from ..dependencies import (
     obtener_carrito,
     obtener_catalogo,
-    obtener_compras,
+    obtener_compras_cliente,
     requerir_cliente,
 )
 from ..schemas import (
@@ -132,7 +132,7 @@ def quitar_cupon(
 def finalizar_compra(
     datos: CheckoutSolicitud,
     sesion: Sesion = Depends(requerir_cliente),
-    compras: ControladorCompras = Depends(obtener_compras),
+    compras: ControladorComprasCliente = Depends(obtener_compras_cliente),
 ) -> dict:
     return compras.comprar(
         sesion,

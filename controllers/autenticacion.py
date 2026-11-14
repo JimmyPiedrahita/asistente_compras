@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from core.errors import CredencialesInvalidas, SolicitudInvalida
 from core.logging import obtener_logger
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from infrastructure.mongodb.global_db import RepositorioUsuarios
 from models.permisos import CLIENTE
 from models.seguridad import Usuario, es_email_valido, verificar_password
 
@@ -14,7 +14,7 @@ logger = obtener_logger("asistente_compras.autenticacion")
 
 
 class ControladorAutenticacion:
-    def __init__(self, repositorio: RepositorioMongo, registro: RegistroSesiones) -> None:
+    def __init__(self, repositorio: RepositorioUsuarios, registro: RegistroSesiones) -> None:
         self.repo = repositorio
         self.registro = registro
 

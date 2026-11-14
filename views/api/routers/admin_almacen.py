@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
-from controllers.administracion import ControladorAdministracion
-from controllers.compras import ControladorCompras
+from controllers.administracion import ControladorAdminAlmacen
+from controllers.compras import ControladorComprasAlmacen
 from controllers.sesiones import Sesion
 
 from ..dependencies import (
-    obtener_administracion,
-    obtener_compras,
+    obtener_admin_almacen,
+    obtener_compras_almacen,
     requerir_admin_almacen,
 )
 from ..schemas import (
@@ -30,7 +30,7 @@ router = APIRouter(tags=["Administrador de almacén"])
 @router.get("/admin-almacen/productos", response_model=list[ProductoPublico])
 def listar_productos(
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> list[dict]:
     return admin.listar_productos(sesion)
 
@@ -43,7 +43,7 @@ def listar_productos(
 def crear_producto(
     datos: ProductoSolicitud,
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> dict:
     return admin.crear_producto(sesion, datos.model_dump())
 
@@ -53,7 +53,7 @@ def actualizar_producto(
     producto_id: str,
     datos: ProductoActualizacion,
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> dict:
     return admin.actualizar_producto(sesion, producto_id, datos.model_dump(exclude_unset=True))
 
@@ -65,7 +65,7 @@ def actualizar_producto(
 def eliminar_producto(
     producto_id: str,
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> None:
     admin.eliminar_producto(sesion, producto_id)
 
@@ -77,7 +77,7 @@ def eliminar_producto(
 def importar_csv(
     datos: CsvSolicitud,
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> dict:
     return admin.importar_csv(sesion, datos.contenido)
 
@@ -86,7 +86,7 @@ def importar_csv(
 @router.get("/admin-almacen/cupones", response_model=list[CuponRespuesta])
 def listar_cupones(
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> list[dict]:
     return admin.listar_cupones(sesion)
 
@@ -99,7 +99,7 @@ def listar_cupones(
 def crear_cupon(
     datos: CuponCrearSolicitud,
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> dict:
     return admin.crear_cupon(sesion, datos.codigo, datos.porcentaje)
 
@@ -111,7 +111,7 @@ def crear_cupon(
 def eliminar_cupon(
     cupon_id: str,
     sesion: Sesion = Depends(requerir_admin_almacen),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> None:
     admin.eliminar_cupon(sesion, cupon_id)
 
@@ -120,17 +120,17 @@ def eliminar_cupon(
 @router.get("/admin-almacen/compras")
 def listar_compras(
     sesion: Sesion = Depends(requerir_admin_almacen),
-    compras: ControladorCompras = Depends(obtener_compras),
+    compras: ControladorComprasAlmacen = Depends(obtener_compras_almacen),
 ) -> list[dict]:
-    return compras.compras_del_almacen(sesion.almacen_id or "")
+    return compras.compras_del_almacen()
 
 
 @router.get("/admin-almacen/estadisticas")
 def estadisticas(
     sesion: Sesion = Depends(requerir_admin_almacen),
-    compras: ControladorCompras = Depends(obtener_compras),
+    compras: ControladorComprasAlmacen = Depends(obtener_compras_almacen),
 ) -> dict:
-    return compras.estadisticas_del_almacen(sesion.almacen_id or "")
+    return compras.estadisticas_del_almacen()
 
 
 __all__ = ["router"]

@@ -1,7 +1,11 @@
 """Pruebas de integración de la API HTTP con MongoDB real.
 
 Se ejecutan solo cuando ``MONGODB_URI`` está definida. Cada prueba usa una base
-de datos temporal que se elimina al terminar.
+global temporal y bases de almacén temporales que se eliminan al terminar.
+
+La consistencia entre la base global y las bases de almacén es eventual. Como
+el listener no corre dentro de estas pruebas, se reconcilia explícitamente con
+``ctx.sincronizador.reconciliar_todo()`` y ``ctx.proyector.reconciliar_todo()``.
 """
 
 from __future__ import annotations
@@ -37,6 +41,10 @@ REGISTRO = {
 class PruebasAPI(unittest.TestCase):
     def setUp(self) -> None:
         self.base_datos = f"test_api_{uuid.uuid4().hex[:10]}"
+        self._mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
+        # La app crea la cuenta inicial al construir el contexto. Se limpia
+        # antes para que la prueba sea reproducible.
+        self._mongo.drop_database(self.base_datos)
         self.settings = Settings.de_pruebas(
             mongodb_uri=MONGODB_URI or "",
             mongodb_db=self.base_datos,
@@ -44,17 +52,19 @@ class PruebasAPI(unittest.TestCase):
             admin_password=ADMIN_PASSWORD,
         )
         self.app = create_app(self.settings)
-        self.repo = self.app.state.repositorio
+        self.ctx = self.app.state.contexto
         self.client = TestClient(self.app)
-        self._mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
         self.admin = self._login(ADMIN_EMAIL, ADMIN_PASSWORD)
 
     def tearDown(self) -> None:
         try:
+            for almacen in self.ctx.repo_almacenes.listar():
+                if almacen.db_name:
+                    self._mongo.drop_database(almacen.db_name)
             self._mongo.drop_database(self.base_datos)
         finally:
             self._mongo.close()
-            self.repo.close()
+            self.ctx.cerrar()
 
     # Utilidades -------------------------------------------------------
     def _login(self, email: str, password: str) -> dict[str, str]:
@@ -138,6 +148,8 @@ class PruebasAPI(unittest.TestCase):
             precio=2500,
             presentacion="500 g",
         )
+        # El listener no corre en las pruebas: se reconcilia el catálogo global.
+        self.ctx.sincronizador.reconciliar_todo()
         return {
             "central": central,
             "norte": norte,
@@ -160,11 +172,12 @@ class PruebasAPI(unittest.TestCase):
         self.assertEqual(sesion["rol"], "ADMINISTRADOR_APP")
         self.assertEqual(sesion["email"], ADMIN_EMAIL)
 
-        self.assertEqual(self._mongo[self.base_datos]["almacenes"].count_documents({}), 0)
-        self.assertEqual(self._mongo[self.base_datos]["productos"].count_documents({}), 0)
-        self.assertEqual(self._mongo[self.base_datos]["cupones"].count_documents({}), 0)
-        self.assertEqual(self._mongo[self.base_datos]["compras"].count_documents({}), 0)
-        self.assertEqual(self._mongo[self.base_datos]["usuarios"].count_documents({}), 1)
+        base = self._mongo[self.base_datos]
+        self.assertEqual(base["almacenes"].count_documents({}), 0)
+        self.assertEqual(base["productos_global"].count_documents({}), 0)
+        self.assertEqual(base["cupones_global"].count_documents({}), 0)
+        self.assertEqual(base["compras"].count_documents({}), 0)
+        self.assertEqual(base["usuarios"].count_documents({}), 1)
 
         self.assertEqual(
             self.client.get("/api/v1/admin-app/almacenes", headers=self.admin).json(), []
@@ -181,12 +194,12 @@ class PruebasAPI(unittest.TestCase):
         self.assertEqual(incorrecto.json()["error"], "Credenciales incorrectas")
 
         # La cuenta inicial no se duplica al reiniciar la aplicación.
-        self.repo.inicializar(
+        self.ctx.repo_usuarios.asegurar_admin(
             admin_email=ADMIN_EMAIL,
             admin_password=ADMIN_PASSWORD,
             admin_nombre="Administrador",
         )
-        self.assertEqual(self._mongo[self.base_datos]["usuarios"].count_documents({}), 1)
+        self.assertEqual(base["usuarios"].count_documents({}), 1)
 
     def test_restricciones_por_rol(self) -> None:
         datos = self._preparar_dos_almacenes()
@@ -237,6 +250,30 @@ class PruebasAPI(unittest.TestCase):
             self.client.get("/api/v1/health/live").status_code,
             200,
         )
+
+    def test_aislamiento_entre_almacenes(self) -> None:
+        datos = self._preparar_dos_almacenes()
+        producto_norte = datos["arroz_norte"]["producto_id"]
+
+        # El administrador de Central no puede modificar ni eliminar un
+        # producto de Norte aunque conozca su identificador.
+        respuesta = self.client.patch(
+            f"/api/v1/admin-almacen/productos/{producto_norte}",
+            json={"precio": 1},
+            headers=datos["admin_central"],
+        )
+        self.assertEqual(respuesta.status_code, 404, respuesta.text)
+        respuesta = self.client.delete(
+            f"/api/v1/admin-almacen/productos/{producto_norte}",
+            headers=datos["admin_central"],
+        )
+        self.assertEqual(respuesta.status_code, 404, respuesta.text)
+
+        # Y sigue viendo solo sus propios productos.
+        propios = self.client.get(
+            "/api/v1/admin-almacen/productos", headers=datos["admin_central"]
+        ).json()
+        self.assertEqual({p["nombre"] for p in propios}, {"Arroz Diana", "Leche Entera"})
 
     def test_flujo_completo_de_compra(self) -> None:
         datos = self._preparar_dos_almacenes()
@@ -298,13 +335,15 @@ class PruebasAPI(unittest.TestCase):
             )
             self.assertEqual(respuesta.status_code, 200, respuesta.text)
 
-        # Cupón del almacén central: solo descuenta su subtotal.
+        # Cupón del almacén central: solo descuenta su subtotal. Se reconcilia
+        # para que el cliente lo vea en cupones_global.
         cupon = self.client.post(
             "/api/v1/admin-almacen/cupones",
             json={"codigo": "CENTRAL10", "porcentaje": 10},
             headers=datos["admin_central"],
         )
         self.assertEqual(cupon.status_code, 201, cupon.text)
+        self.ctx.sincronizador.reconciliar_todo()
         resumen = self.client.post(
             "/api/v1/cart/coupons", json={"codigo": "central10"}, headers=cliente
         ).json()
@@ -371,6 +410,9 @@ class PruebasAPI(unittest.TestCase):
         self.assertEqual(repetida.status_code, 200, repetida.text)
         self.assertEqual(repetida.json()["compra_id"], comprobante["compra_id"])
         self.assertEqual(self._mongo[self.base_datos]["compras"].count_documents({}), 1)
+
+        # El proyector no corre en las pruebas: se reconcilian las compras.
+        self.ctx.proyector.reconciliar_todo()
 
         # Cada almacén ve solo su parte de la compra.
         compras_central = self.client.get(
@@ -520,6 +562,32 @@ class PruebasAPI(unittest.TestCase):
             headers=self.admin,
         )
         self.assertEqual(respuesta.status_code, 404)
+
+    def test_no_expone_credenciales_ni_metadatos_internos(self) -> None:
+        datos = self._preparar_dos_almacenes()
+        cliente = self._registrar_cliente()
+        self.client.post("/api/v1/shopping-list", json={"nombre": "arroz"}, headers=cliente)
+
+        respuestas = [
+            self.client.get("/api/v1/auth/me", headers=self.admin),
+            self.client.get("/api/v1/admin-app/almacenes", headers=self.admin),
+            self.client.get("/api/v1/admin-app/administradores", headers=self.admin),
+            self.client.get("/api/v1/admin-almacen/productos", headers=datos["admin_central"]),
+            self.client.get("/api/v1/admin-almacen/cupones", headers=datos["admin_central"]),
+            self.client.post("/api/v1/search", json={"modo": "catalogo"}, headers=cliente),
+        ]
+        for respuesta in respuestas:
+            self.assertEqual(respuesta.status_code, 200, respuesta.text)
+            texto = respuesta.text.lower()
+            for prohibido in (
+                "mongodb://",
+                "authsource",
+                "password",
+                "mongo_user",
+                "db_name",
+                "replicaset",
+            ):
+                self.assertNotIn(prohibido, texto, f"{prohibido} en {respuesta.request.url}")
 
 
 if __name__ == "__main__":

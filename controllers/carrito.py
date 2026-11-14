@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.errors import NoEncontrado, SolicitudInvalida
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from infrastructure.mongodb.global_db import RepositorioCatalogoGlobal
 from models.texto import normalizar_texto
 
 from .sesiones import Sesion
@@ -18,7 +18,7 @@ def _dinero(valor: float) -> float:
 
 
 class ControladorCarrito:
-    def __init__(self, repositorio: RepositorioMongo) -> None:
+    def __init__(self, repositorio: RepositorioCatalogoGlobal) -> None:
         self.repo = repositorio
 
     # Ítems -------------------------------------------------------------

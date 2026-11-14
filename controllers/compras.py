@@ -6,7 +6,8 @@ import uuid
 from typing import Any
 
 from core.errors import Conflicto, SolicitudInvalida
-from infrastructure.mongodb.repositorio import RepositorioMongo
+from infrastructure.mongodb.almacen import RepositorioAlmacen
+from infrastructure.mongodb.global_db import RepositorioComprasGlobal
 from models.texto import normalizar_texto
 
 from .carrito import ControladorCarrito
@@ -17,8 +18,14 @@ def _dinero(valor: Any) -> float:
     return round(float(valor) + 1e-9, 2)
 
 
-class ControladorCompras:
-    def __init__(self, repositorio: RepositorioMongo, carrito: ControladorCarrito) -> None:
+class ControladorComprasCliente:
+    """Checkout del cliente contra ``global_asistente_compras.compras``."""
+
+    def __init__(
+        self,
+        repositorio: RepositorioComprasGlobal,
+        carrito: ControladorCarrito,
+    ) -> None:
         self.repo = repositorio
         self.carrito = carrito
 
@@ -56,9 +63,7 @@ class ControladorCompras:
                 detalles={"resumen": resumen},
             )
 
-        usuario = self.repo.obtener_usuario(sesion.usuario_id)
-        autorizacion = bool(usuario.autoriza_datos) if usuario else False
-        if not autorizacion:
+        if not sesion.autoriza_datos:
             raise SolicitudInvalida(
                 "No hay autorización registrada para el tratamiento y comunicación de datos"
             )
@@ -108,7 +113,6 @@ class ControladorCompras:
             "autorizacion_datos": True,
             "pago": True,
         }
-        clave = str(clave_idempotencia or "").strip() or uuid.uuid4().hex
         compra, creada = self.repo.crear_compra(
             documento, cliente_id=sesion.usuario_id, clave_idempotencia=clave
         )
@@ -136,13 +140,19 @@ class ControladorCompras:
             "pago": True,
         }
 
-    # Consulta para el administrador del almacén -----------------------
-    def compras_del_almacen(self, almacen_id: str) -> list[dict[str, Any]]:
-        return self.repo.listar_compras_por_almacen(almacen_id)
 
-    def estadisticas_del_almacen(self, almacen_id: str) -> dict[str, Any]:
-        filas = self.repo.estadisticas_almacen(almacen_id)
-        productos = self.repo.listar_todos_productos(almacen_id)
+class ControladorComprasAlmacen:
+    """Compras y estadísticas de la base propia del almacén."""
+
+    def __init__(self, repositorio: RepositorioAlmacen) -> None:
+        self.repo = repositorio
+
+    def compras_del_almacen(self) -> list[dict[str, Any]]:
+        return self.repo.listar_compras_por_almacen()
+
+    def estadisticas_del_almacen(self) -> dict[str, Any]:
+        filas = self.repo.estadisticas_almacen()
+        productos = self.repo.listar_todos_productos()
         if not productos:
             return {
                 "hay_productos": False,
@@ -173,4 +183,11 @@ class ControladorCompras:
         }
 
 
-__all__ = ["ControladorCompras"]
+# Compatibilidad con importaciones antiguas.
+ControladorCompras = ControladorComprasCliente
+
+__all__ = [
+    "ControladorCompras",
+    "ControladorComprasAlmacen",
+    "ControladorComprasCliente",
+]

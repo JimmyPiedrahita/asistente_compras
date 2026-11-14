@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
-from controllers.administracion import ControladorAdministracion
+from controllers.administracion import ControladorAdminApp
 from controllers.sesiones import Sesion
 
-from ..dependencies import obtener_administracion, requerir_admin_app
+from ..dependencies import obtener_admin_app, requerir_admin_app
 from ..schemas import (
     AdminAlmacenSolicitud,
     AlmacenRespuesta,
@@ -23,7 +23,7 @@ router = APIRouter(tags=["Administrador de la aplicación"])
 @router.get("/admin-app/almacenes", response_model=list[AlmacenRespuesta])
 def listar_almacenes(
     sesion: Sesion = Depends(requerir_admin_app),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminApp = Depends(obtener_admin_app),
 ) -> list[dict]:
     return admin.listar_almacenes()
 
@@ -36,7 +36,7 @@ def listar_almacenes(
 def crear_almacen(
     datos: AlmacenSolicitud,
     sesion: Sesion = Depends(requerir_admin_app),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminApp = Depends(obtener_admin_app),
 ) -> dict:
     return admin.crear_almacen(datos.nombre)
 
@@ -45,7 +45,7 @@ def crear_almacen(
 @router.get("/admin-app/administradores", response_model=list[UsuarioAdminRespuesta])
 def listar_administradores(
     sesion: Sesion = Depends(requerir_admin_app),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminApp = Depends(obtener_admin_app),
 ) -> list[dict]:
     return admin.listar_admins_almacen()
 
@@ -58,7 +58,7 @@ def listar_administradores(
 def crear_administrador(
     datos: AdminAlmacenSolicitud,
     sesion: Sesion = Depends(requerir_admin_app),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminApp = Depends(obtener_admin_app),
 ) -> dict:
     return admin.crear_admin_almacen(
         nombre=datos.nombre,
@@ -76,7 +76,7 @@ def actualizar_credenciales(
     usuario_id: str,
     datos: CredencialesSolicitud,
     sesion: Sesion = Depends(requerir_admin_app),
-    admin: ControladorAdministracion = Depends(obtener_administracion),
+    admin: ControladorAdminApp = Depends(obtener_admin_app),
 ) -> dict:
     return admin.actualizar_credenciales(usuario_id, email=datos.email, password=datos.password)
 
