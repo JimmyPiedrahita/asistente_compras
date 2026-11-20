@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 
+from infrastructure.mongodb.almacen import _producto, _producto_documento
 from models.carrito import Carrito
 from models.cupones import Cupon, validar_porcentaje
 from models.productos import Producto, validar_precio
@@ -52,6 +53,38 @@ class PruebasProducto(unittest.TestCase):
                 Producto.crear(**{**base, campo: "  "})
         with self.assertRaises(ValueError):
             Producto.crear(**{**base, "precio": 0})
+
+    def test_imagen_opcional_y_compatibilidad(self) -> None:
+        producto = Producto.crear(
+            producto_id="p1",
+            almacen_id="a1",
+            tipo_producto="arroz",
+            nombre="Arroz",
+            precio=1000,
+            presentacion="500 g",
+        )
+        self.assertEqual(producto.imagen_url, "")
+        self.assertEqual(producto.imagen_public_id, "")
+        self.assertEqual(producto.publico()["imagen_url"], "")
+
+        producto.imagen_url = "https://res.cloudinary.com/demo/imagen.webp"
+        producto.imagen_public_id = "asistente-compras/a1/p1"
+        self.assertEqual(producto.publico()["imagen_url"], producto.imagen_url)
+
+        documento = _producto_documento(producto)
+        self.assertEqual(documento["imagen_url"], producto.imagen_url)
+        self.assertEqual(documento["imagen_public_id"], producto.imagen_public_id)
+        recuperado = _producto(documento)
+        self.assertEqual(recuperado.imagen_url, producto.imagen_url)
+        self.assertEqual(recuperado.imagen_public_id, producto.imagen_public_id)
+
+        # Los documentos antiguos no tienen los campos de imagen.
+        antiguo = dict(documento)
+        antiguo.pop("imagen_url")
+        antiguo.pop("imagen_public_id")
+        recuperado_antiguo = _producto(antiguo)
+        self.assertEqual(recuperado_antiguo.imagen_url, "")
+        self.assertEqual(recuperado_antiguo.imagen_public_id, "")
 
 
 class PruebasCupon(unittest.TestCase):

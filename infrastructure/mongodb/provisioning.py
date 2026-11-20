@@ -90,6 +90,60 @@ class ServicioAprovisionamiento:
         except PyMongoError as error:
             raise ServicioNoDisponible("No se pudo aprovisionar el almacén en MongoDB") from error
 
+    def asegurar_privilegios_catalogo(self, almacen: Almacen) -> None:
+        """Repara los permisos del listener para almacenes existentes."""
+        if self.settings.modo_pruebas:
+            return
+        if not almacen.db_name:
+            return
+        try:
+            cliente = self.conexiones.cliente(self.fabrica.uri_provisioner())
+            admin = cliente.base("admin")
+            catalogo = [
+                {
+                    "resource": {"db": almacen.db_name, "collection": "productos"},
+                    "actions": ["find", "changeStream"],
+                },
+                {
+                    "resource": {"db": almacen.db_name, "collection": "cupones"},
+                    "actions": ["find", "changeStream"],
+                },
+            ]
+            try:
+                admin.command("grantPrivilegesToRole", _ROLE_CATALOGO, privileges=catalogo)
+            except OperationFailure as error:
+                if error.code not in _YA_EXISTE:
+                    raise
+        except PyMongoError as error:
+            raise ServicioNoDisponible(
+                "No se pudieron reparar los permisos del catálogo"
+            ) from error
+
+    def asegurar_privilegios_compras(self, almacen: Almacen) -> None:
+        """Repara los permisos del proyector para almacenes existentes."""
+        if self.settings.modo_pruebas:
+            return
+        if not almacen.db_name:
+            return
+        try:
+            cliente = self.conexiones.cliente(self.fabrica.uri_provisioner())
+            admin = cliente.base("admin")
+            proyector = [
+                {
+                    "resource": {"db": almacen.db_name, "collection": "compras_almacen"},
+                    "actions": ["find", "insert", "update", "remove"],
+                }
+            ]
+            try:
+                admin.command("grantPrivilegesToRole", _ROLE_PROYECTOR, privileges=proyector)
+            except OperationFailure as error:
+                if error.code not in _YA_EXISTE:
+                    raise
+        except PyMongoError as error:
+            raise ServicioNoDisponible(
+                "No se pudieron reparar los permisos de compras"
+            ) from error
+
     def _crear_rol_almacen(self, base: Any, db_name: str) -> None:
         privilegios = [
             {

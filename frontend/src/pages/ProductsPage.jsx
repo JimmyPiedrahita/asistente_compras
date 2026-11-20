@@ -35,7 +35,30 @@ export default function ProductsPage() {
   const [csvMensaje, setCsvMensaje] = useState("");
   const [importando, setImportando] = useState(false);
   const [eliminando, setEliminando] = useState("");
+  const [imagenArchivo, setImagenArchivo] = useState(null);
+  const [imagenActual, setImagenActual] = useState("");
+  const [imagenPreview, setImagenPreview] = useState("");
+  const [quitandoImagen, setQuitandoImagen] = useState(false);
   const archivoRef = useRef(null);
+  const imagenInputRef = useRef(null);
+  const imagenPreviewRef = useRef("");
+
+  const fijarPreview = useCallback((url) => {
+    if (imagenPreviewRef.current.startsWith("blob:")) {
+      URL.revokeObjectURL(imagenPreviewRef.current);
+    }
+    imagenPreviewRef.current = url;
+    setImagenPreview(url);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (imagenPreviewRef.current.startsWith("blob:")) {
+        URL.revokeObjectURL(imagenPreviewRef.current);
+      }
+    },
+    [],
+  );
 
   const cargar = useCallback(async () => {
     try {
@@ -58,6 +81,10 @@ export default function ProductsPage() {
   const limpiar = () => {
     setForm(VACIO);
     setEditandoId("");
+    setImagenArchivo(null);
+    setImagenActual("");
+    fijarPreview("");
+    if (imagenInputRef.current) imagenInputRef.current.value = "";
   };
 
   const editar = (producto) => {
@@ -69,7 +96,56 @@ export default function ProductsPage() {
       precio: String(producto.precio),
       presentacion: producto.presentacion,
     });
+    setImagenArchivo(null);
+    setImagenActual(producto.imagen_url || "");
+    fijarPreview(producto.imagen_url || "");
+    if (imagenInputRef.current) imagenInputRef.current.value = "";
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const seleccionarImagen = (evento) => {
+    const archivo = evento.target.files?.[0];
+    if (!archivo) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(archivo.type)) {
+      notify("Elige una imagen JPEG, PNG o WebP.", "error", "Imagen");
+      evento.target.value = "";
+      return;
+    }
+    if (archivo.size > 2 * 1024 * 1024) {
+      notify("La imagen supera el tamaño máximo de 2 MB.", "error", "Imagen");
+      evento.target.value = "";
+      return;
+    }
+    setImagenArchivo(archivo);
+    fijarPreview(URL.createObjectURL(archivo));
+  };
+
+  const quitarSeleccion = () => {
+    setImagenArchivo(null);
+    fijarPreview(imagenActual);
+    if (imagenInputRef.current) imagenInputRef.current.value = "";
+  };
+
+  const eliminarImagen = async () => {
+    if (!editandoId) {
+      quitarSeleccion();
+      return;
+    }
+    if (!window.confirm("¿Eliminar la imagen de este producto?")) return;
+    setQuitandoImagen(true);
+    try {
+      await api.deleteProductImage(token, editandoId);
+      setImagenArchivo(null);
+      setImagenActual("");
+      fijarPreview("");
+      if (imagenInputRef.current) imagenInputRef.current.value = "";
+      await cargar();
+      notify("Imagen eliminada.", "success", "Productos");
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setQuitandoImagen(false);
+    }
   };
 
   const guardar = async (evento) => {
@@ -90,18 +166,38 @@ export default function ProductsPage() {
       return;
     }
     setGuardando(true);
+    let productoId = editandoId;
+    let creado = false;
     try {
       if (editandoId) {
         await api.updateProduct(token, editandoId, datos);
-        notify("Producto actualizado.", "success", "Productos");
       } else {
-        await api.createProduct(token, datos);
-        notify("Producto agregado al catálogo.", "success", "Productos");
+        const guardado = await api.createProduct(token, datos);
+        productoId = guardado?.producto_id || "";
+        creado = true;
       }
+      if (imagenArchivo && productoId) {
+        await api.uploadProductImage(token, productoId, imagenArchivo);
+      }
+      notify(
+        editandoId ? "Producto actualizado." : "Producto agregado al catálogo.",
+        "success",
+        "Productos",
+      );
       limpiar();
       await cargar();
     } catch (error) {
-      notifyError(error);
+      if (creado) {
+        notify(
+          `El producto se guardó, pero la imagen no se pudo subir: ${errorText(error)}`,
+          "error",
+          "Productos",
+        );
+        limpiar();
+        await cargar();
+      } else {
+        notifyError(error);
+      }
     } finally {
       setGuardando(false);
     }
@@ -217,6 +313,70 @@ export default function ProductsPage() {
                 required
               />
             </Field>
+            <div>
+              <span className="mb-1 block text-xs font-semibold text-stone-600">
+                Imagen del producto (opcional)
+              </span>
+              <div className="flex items-start gap-3">
+                <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg border border-stone-200 bg-stone-50 text-stone-300">
+                  {imagenPreview ? (
+                    <img
+                      src={imagenPreview}
+                      alt="Vista previa de la imagen"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Icon name="package" size={22} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      ref={imagenInputRef}
+                      id="prod-imagen"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={seleccionarImagen}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon="download"
+                      onClick={() => imagenInputRef.current?.click()}
+                      disabled={guardando}
+                    >
+                      {imagenPreview ? "Cambiar imagen" : "Elegir imagen"}
+                    </Button>
+                    {imagenArchivo ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon="x"
+                        onClick={quitarSeleccion}
+                        disabled={guardando}
+                      >
+                        Quitar selección
+                      </Button>
+                    ) : imagenActual ? (
+                      <Button
+                        size="sm"
+                        variant="dangerSoft"
+                        icon="trash"
+                        loading={quitandoImagen}
+                        onClick={eliminarImagen}
+                        disabled={guardando}
+                      >
+                        Eliminar imagen
+                      </Button>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-xs text-stone-400">
+                    JPEG, PNG o WebP de hasta 2 MB. Se muestra recortada en formato cuadrado.
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="flex gap-2">
               <Button type="submit" icon={editandoId ? "check" : "plus"} loading={guardando}>
                 {editandoId ? "Guardar cambios" : "Agregar producto"}
@@ -260,10 +420,29 @@ export default function ProductsPage() {
                   {productos.map((producto) => (
                     <tr key={producto.producto_id} className="align-middle">
                       <td className="py-2.5 pr-3">
-                        <p className="font-medium text-stone-900">{producto.nombre}</p>
-                        {producto.marca_variedad ? (
-                          <p className="text-xs text-stone-500">{producto.marca_variedad}</p>
-                        ) : null}
+                        <div className="flex items-center gap-3">
+                          {producto.imagen_url ? (
+                            <img
+                              src={producto.imagen_url}
+                              alt={`Imagen de ${producto.nombre}`}
+                              loading="lazy"
+                              className="h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-stone-200"
+                            />
+                          ) : (
+                            <span
+                              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-dashed border-stone-200 bg-stone-50 text-stone-300"
+                              aria-hidden="true"
+                            >
+                              <Icon name="package" size={16} />
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-medium text-stone-900">{producto.nombre}</p>
+                            {producto.marca_variedad ? (
+                              <p className="text-xs text-stone-500">{producto.marca_variedad}</p>
+                            ) : null}
+                          </div>
+                        </div>
                       </td>
                       <td className="py-2.5 pr-3">
                         <Badge tone="slate">{producto.tipo_producto}</Badge>

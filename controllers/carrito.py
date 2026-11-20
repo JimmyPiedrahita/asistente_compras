@@ -129,6 +129,7 @@ class ControladorCarrito:
                     "nombre": producto.nombre,
                     "marca_variedad": producto.marca_variedad,
                     "presentacion": producto.presentacion,
+                    "imagen_url": producto.imagen_url,
                     "precio_unitario": producto.precio,
                     "cantidad": item.cantidad,
                     "importe": importe,

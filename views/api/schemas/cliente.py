@@ -31,6 +31,7 @@ class ProductoPublico(ModeloBase):
     marca_variedad: str = ""
     precio: float
     presentacion: str
+    imagen_url: str = ""
 
 
 class ResultadoBusqueda(ModeloBase):

@@ -245,47 +245,74 @@ export default function ShoppingListPage({ onNavigate }) {
                       No se encontraron productos para “{grupo.producto_buscado}”.
                     </Alert>
                   ) : (
-                    <div className="overflow-hidden rounded-lg border border-stone-200">
-                      <ul className="divide-y divide-stone-100">
-                        {grupo.resultados.map((fila) => {
-                          const clave = `${fila.almacen_id}:${fila.producto.producto_id}`;
-                          return (
-                            <li
-                              key={clave}
-                              className="flex flex-wrap items-center gap-3 bg-white px-4 py-3"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold text-stone-900">
-                                  {fila.producto.nombre}
-                                  {fila.producto.marca_variedad ? (
-                                    <span className="font-normal text-stone-500">
-                                      {" "}
-                                      · {fila.producto.marca_variedad}
-                                    </span>
-                                  ) : null}
-                                </p>
-                                <p className="mt-0.5 text-xs text-stone-500">
-                                  {fila.almacen} · {fila.producto.presentacion}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-bold text-stone-900">
-                                  <Money value={fila.producto.precio} />
-                                </p>
-                                <p className="text-[11px] text-stone-400">por unidad</p>
-                              </div>
-                              <Button
-                                size="sm"
-                                icon="cart"
-                                loading={agregando === clave}
-                                onClick={() => agregarAlCarrito(fila)}
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {grupo.resultados.map((fila) => {
+                        const clave = `${fila.almacen_id}:${fila.producto.producto_id}`;
+                        return (
+                          <article
+                            key={clave}
+                            className="group overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"
+                          >
+                            <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
+                              {fila.producto.imagen_url ? (
+                                <img
+                                  src={fila.producto.imagen_url}
+                                  alt={`Imagen de ${fila.producto.nombre}`}
+                                  loading="lazy"
+                                  className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                                />
+                              ) : (
+                                <div
+                                  className="grid h-full w-full place-items-center text-stone-300"
+                                  aria-label={`Sin imagen de ${fila.producto.nombre}`}
+                                >
+                                  <Icon name="package" size={38} />
+                                </div>
+                              )}
+                              <Badge
+                                tone="dark"
+                                className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)] truncate shadow-sm"
                               >
-                                Agregar
-                              </Button>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                                {fila.almacen}
+                              </Badge>
+                            </div>
+                            <div className="flex min-h-44 flex-col p-4">
+                              <div className="min-w-0">
+                                <p className="text-base font-bold leading-snug text-stone-900">
+                                  {fila.producto.nombre}
+                                </p>
+                                {fila.producto.marca_variedad ? (
+                                  <p className="mt-1 text-sm text-stone-500">
+                                    {fila.producto.marca_variedad}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <p className="mt-2 text-xs font-medium text-stone-500">
+                                Presentación: {fila.producto.presentacion}
+                              </p>
+                              <div className="mt-auto pt-4">
+                                <div className="mb-3 flex items-end justify-between gap-3 border-t border-stone-100 pt-3">
+                                  <div>
+                                    <p className="text-xl font-black tracking-tight text-stone-900">
+                                      <Money value={fila.producto.precio} />
+                                    </p>
+                                    <p className="text-[11px] text-stone-400">por unidad</p>
+                                  </div>
+                                </div>
+                                <Button
+                                  size="lg"
+                                  icon="cart"
+                                  className="w-full"
+                                  loading={agregando === clave}
+                                  onClick={() => agregarAlCarrito(fila)}
+                                >
+                                  Agregar al carrito
+                                </Button>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
                   )}
                 </section>

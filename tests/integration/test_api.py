@@ -18,9 +18,29 @@ from fastapi.testclient import TestClient
 from pymongo import MongoClient
 
 from core.config import Settings
+from infrastructure.imagenes import ServicioImagenesProducto
 from views.api.app import create_app
 
 MONGODB_URI = os.getenv("MONGODB_URI")
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"contenido-de-prueba"
+
+
+class ClienteImagenesFalso:
+    def __init__(self) -> None:
+        self.subidas: list[dict[str, object]] = []
+        self.eliminadas: list[str] = []
+
+    def subir(self, contenido: bytes, *, carpeta: str, public_id: str) -> dict[str, str]:
+        self.subidas.append({"contenido": contenido, "carpeta": carpeta, "public_id": public_id})
+        return {
+            "url": f"https://cdn.test/{carpeta}/{public_id}.webp",
+            "public_id": f"{carpeta}/{public_id}",
+        }
+
+    def eliminar(self, public_id: str) -> None:
+        self.eliminadas.append(public_id)
+
 
 ADMIN_EMAIL = "admin-test@example.com"
 ADMIN_PASSWORD = "AdminPass123"
@@ -274,6 +294,141 @@ class PruebasAPI(unittest.TestCase):
             "/api/v1/admin-almacen/productos", headers=datos["admin_central"]
         ).json()
         self.assertEqual({p["nombre"] for p in propios}, {"Arroz Diana", "Leche Entera"})
+
+    def test_imagenes_de_producto(self) -> None:
+        datos = self._preparar_dos_almacenes()
+        cliente = self._registrar_cliente()
+        fake = ClienteImagenesFalso()
+        self.app.state.imagenes = ServicioImagenesProducto(cliente=fake)
+        producto_id = datos["arroz_central"]["producto_id"]
+        almacen_id = datos["central"]["almacen_id"]
+        repo = self.ctx.directorio.repositorio(almacen_id)
+        ruta = f"/api/v1/admin-almacen/productos/{producto_id}/imagen"
+
+        # Los productos existentes conservan su funcionamiento sin imagen.
+        self.assertEqual(datos["arroz_central"]["imagen_url"], "")
+
+        # Un administrador de otro almacén no puede modificar la imagen.
+        respuesta = self.client.post(
+            ruta,
+            files={"archivo": ("arroz.png", PNG, "image/png")},
+            headers=datos["admin_norte"],
+        )
+        self.assertEqual(respuesta.status_code, 404, respuesta.text)
+        # Ni un cliente.
+        respuesta = self.client.post(
+            ruta,
+            files={"archivo": ("arroz.png", PNG, "image/png")},
+            headers=cliente,
+        )
+        self.assertEqual(respuesta.status_code, 403, respuesta.text)
+
+        # El tipo real del archivo se valida aunque el nombre y el MIME declarado
+        # sean de imagen.
+        respuesta = self.client.post(
+            ruta,
+            files={"archivo": ("arroz.png", b"no es una imagen", "image/png")},
+            headers=datos["admin_central"],
+        )
+        self.assertEqual(respuesta.status_code, 400, respuesta.text)
+        self.assertEqual(fake.subidas, [])
+
+        # También se respeta el tamaño máximo configurado.
+        self.app.state.imagenes = ServicioImagenesProducto(max_bytes=8, cliente=fake)
+        respuesta = self.client.post(
+            ruta,
+            files={"archivo": ("arroz.png", PNG, "image/png")},
+            headers=datos["admin_central"],
+        )
+        self.assertEqual(respuesta.status_code, 400, respuesta.text)
+        self.app.state.imagenes = ServicioImagenesProducto(cliente=fake)
+
+        # Carga válida: se sube y se guarda la URL pública.
+        respuesta = self.client.post(
+            ruta,
+            files={"archivo": ("arroz.png", PNG, "image/png")},
+            headers=datos["admin_central"],
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        self.assertTrue(respuesta.json()["imagen_url"].startswith("https://cdn.test/"))
+        self.assertEqual(len(fake.subidas), 1)
+        primero = repo.obtener_producto(producto_id)
+        assert primero is not None
+        self.assertTrue(primero.imagen_public_id)
+        self.assertIn(f"{almacen_id}-{producto_id}-", primero.imagen_public_id)
+        self.assertTrue(primero.imagen_url)
+
+        fila = next(
+            p
+            for p in self.client.get(
+                "/api/v1/admin-almacen/productos", headers=datos["admin_central"]
+            ).json()
+            if p["producto_id"] == producto_id
+        )
+        self.assertEqual(fila["imagen_url"], primero.imagen_url)
+
+        # Reemplazo: se elimina el activo anterior y se conserva solo el nuevo.
+        respuesta = self.client.post(
+            ruta,
+            files={"archivo": ("arroz.webp", b"RIFF\x00\x00\x00\x00WEBP" + b"x" * 8, "image/webp")},
+            headers=datos["admin_central"],
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        self.assertEqual(fake.eliminadas, [primero.imagen_public_id])
+        segundo = repo.obtener_producto(producto_id)
+        assert segundo is not None
+        self.assertNotEqual(segundo.imagen_public_id, primero.imagen_public_id)
+
+        # El catálogo replicado y el carrito también exponen la imagen.
+        self.ctx.sincronizador.reconciliar_todo()
+        self.client.post("/api/v1/shopping-list", json={"nombre": "arroz"}, headers=cliente)
+        busqueda = self.client.post(
+            "/api/v1/search", json={"modo": "catalogo"}, headers=cliente
+        ).json()
+        resultados = {
+            resultado["almacen_id"]: resultado["producto"]
+            for resultado in busqueda["grupos"][0]["resultados"]
+        }
+        self.assertEqual(resultados[almacen_id]["imagen_url"], segundo.imagen_url)
+
+        self.assertEqual(
+            self.client.post(
+                "/api/v1/cart/items",
+                json={
+                    "almacen_id": almacen_id,
+                    "producto_id": producto_id,
+                    "cantidad": 1,
+                },
+                headers=cliente,
+            ).status_code,
+            200,
+        )
+        carrito = self.client.get("/api/v1/cart", headers=cliente).json()
+        item = next(i for i in carrito["items"] if i["producto_id"] == producto_id)
+        self.assertEqual(item["imagen_url"], segundo.imagen_url)
+
+        # Se puede eliminar la imagen sin eliminar el producto. La operación
+        # es idempotente si el producto ya no tiene imagen.
+        respuesta = self.client.delete(ruta, headers=datos["admin_central"])
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        self.assertEqual(respuesta.json()["imagen_url"], "")
+        self.assertIn(segundo.imagen_public_id, fake.eliminadas)
+        tercero = repo.obtener_producto(producto_id)
+        assert tercero is not None
+        self.assertEqual(tercero.imagen_url, "")
+        self.assertEqual(tercero.imagen_public_id, "")
+        eliminadas = len(fake.eliminadas)
+        self.assertEqual(self.client.delete(ruta, headers=datos["admin_central"]).status_code, 200)
+        self.assertEqual(len(fake.eliminadas), eliminadas)
+
+        # Sin credenciales de Cloudinary la carga responde 503.
+        self.app.state.imagenes = ServicioImagenesProducto()
+        respuesta = self.client.post(
+            ruta,
+            files={"archivo": ("arroz.png", PNG, "image/png")},
+            headers=datos["admin_central"],
+        )
+        self.assertEqual(respuesta.status_code, 503, respuesta.text)
 
     def test_flujo_completo_de_compra(self) -> None:
         datos = self._preparar_dos_almacenes()

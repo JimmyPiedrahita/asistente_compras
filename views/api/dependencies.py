@@ -11,6 +11,7 @@ from controllers.catalogo import ControladorCatalogo
 from controllers.compras import ControladorComprasAlmacen, ControladorComprasCliente
 from controllers.sesiones import RegistroSesiones, Sesion
 from core.errors import NoPermitido, SesionInvalida
+from infrastructure.imagenes import ServicioImagenesProducto
 from infrastructure.mongodb.contexto import ContextoAplicacion
 from models.permisos import ADMINISTRADOR_ALMACEN, ADMINISTRADOR_APP, CLIENTE
 
@@ -21,6 +22,10 @@ def obtener_contexto(request: Request) -> ContextoAplicacion:
 
 def obtener_registro(request: Request) -> RegistroSesiones:
     return request.app.state.sesiones
+
+
+def obtener_imagenes(request: Request) -> ServicioImagenesProducto:
+    return request.app.state.imagenes
 
 
 def obtener_sesion(
@@ -95,12 +100,14 @@ def requerir_admin_app(sesion: Sesion = Depends(obtener_sesion)) -> Sesion:
 def obtener_admin_almacen(
     sesion: Sesion = Depends(requerir_admin_almacen),
     contexto: ContextoAplicacion = Depends(obtener_contexto),
+    imagenes: ServicioImagenesProducto = Depends(obtener_imagenes),
 ) -> ControladorAdminAlmacen:
     repositorio = contexto.directorio.repositorio(sesion.almacen_id or "")
     return ControladorAdminAlmacen(
         repositorio,
         contexto.validador,
         max_csv_bytes=contexto.settings.max_csv_bytes,
+        imagenes=imagenes,
     )
 
 
@@ -121,6 +128,7 @@ __all__ = [
     "obtener_compras_almacen",
     "obtener_compras_cliente",
     "obtener_contexto",
+    "obtener_imagenes",
     "obtener_registro",
     "obtener_sesion",
     "requerir_admin_almacen",

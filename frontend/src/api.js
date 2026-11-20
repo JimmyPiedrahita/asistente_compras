@@ -27,11 +27,13 @@ export function errorText(error) {
   return error.message || "Error inesperado";
 }
 
-async function request(path, { method = "GET", body, token, signal } = {}) {
+async function request(path, { method = "GET", body, formData, token, signal } = {}) {
   const headers = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const init = { method, headers, signal };
-  if (body !== undefined) {
+  if (formData !== undefined) {
+    init.body = formData;
+  } else if (body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(body);
   }
@@ -108,6 +110,20 @@ export const api = {
     }),
   deleteProduct: (token, productId) =>
     request(`/admin-almacen/productos/${q(productId)}`, { method: "DELETE", token }),
+  uploadProductImage: (token, productId, file) => {
+    const formData = new FormData();
+    formData.append("archivo", file, file.name);
+    return request(`/admin-almacen/productos/${q(productId)}/imagen`, {
+      method: "POST",
+      token,
+      formData,
+    });
+  },
+  deleteProductImage: (token, productId) =>
+    request(`/admin-almacen/productos/${q(productId)}/imagen`, {
+      method: "DELETE",
+      token,
+    }),
   importCsv: (token, contenido, nombre_archivo) =>
     request("/admin-almacen/productos/importar", {
       method: "POST",

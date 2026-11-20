@@ -81,6 +81,8 @@ def _producto(documento: dict[str, Any]) -> Producto:
         marca_variedad=str(documento.get("marca_variedad", "")),
         precio=validar_precio(documento.get("precio")),
         presentacion=str(documento.get("presentacion", "")),
+        imagen_url=str(documento.get("imagen_url", "") or ""),
+        imagen_public_id=str(documento.get("imagen_public_id", "") or ""),
         creado_en=documento.get("creado_en"),
         actualizado_en=documento.get("actualizado_en"),
     )
@@ -504,6 +506,7 @@ class RepositorioReplicaCatalogo:
             "precio": documento.get("precio"),
             "presentacion": documento.get("presentacion", ""),
             "presentacion_normalizada": documento.get("presentacion_normalizada", ""),
+            "imagen_url": documento.get("imagen_url", ""),
             "creado_en": documento.get("creado_en"),
             "actualizado_en": documento.get("actualizado_en"),
             "sincronizado_en": _ahora(),

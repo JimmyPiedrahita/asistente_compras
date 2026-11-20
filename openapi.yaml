@@ -699,6 +699,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin-almacen/productos/{producto_id}/imagen:
+    post:
+      tags:
+      - Administrador de almacén
+      summary: Subir Imagen Producto
+      operationId: subir_imagen_producto_api_v1_admin_almacen_productos__producto_id__imagen_post
+      parameters:
+      - name: producto_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Producto Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_subir_imagen_producto_api_v1_admin_almacen_productos__producto_id__imagen_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoPublico'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Administrador de almacén
+      summary: Eliminar Imagen Producto
+      operationId: eliminar_imagen_producto_api_v1_admin_almacen_productos__producto_id__imagen_delete
+      parameters:
+      - name: producto_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Producto Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoPublico'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin-almacen/productos/importar:
     post:
       tags:
@@ -1119,6 +1192,17 @@ components:
       required:
       - nombre
       title: AlmacenSolicitud
+    Body_subir_imagen_producto_api_v1_admin_almacen_productos__producto_id__imagen_post:
+      properties:
+        archivo:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Archivo
+          description: Imagen JPEG, PNG o WebP de hasta 2 MB.
+      type: object
+      required:
+      - archivo
+      title: Body_subir_imagen_producto_api_v1_admin_almacen_productos__producto_id__imagen_post
     BusquedaRespuesta:
       properties:
         modo:
@@ -1503,6 +1587,10 @@ components:
         presentacion:
           type: string
           title: Presentacion
+        imagen_url:
+          type: string
+          title: Imagen Url
+          default: ''
       type: object
       required:
       - producto_id

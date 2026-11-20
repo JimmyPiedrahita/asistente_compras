@@ -8,7 +8,9 @@ import re
 import uuid
 from typing import Any
 
-from core.errors import NoEncontrado, NoPermitido, SolicitudInvalida
+from core.errors import NoEncontrado, NoPermitido, ServicioNoDisponible, SolicitudInvalida
+from core.logging import obtener_logger
+from infrastructure.imagenes import ServicioImagenesProducto
 from infrastructure.mongodb.almacen import RepositorioAlmacen
 from infrastructure.mongodb.global_db import RepositorioAlmacenes, RepositorioUsuarios
 from infrastructure.mongodb.provisioning import ServicioAprovisionamiento
@@ -17,6 +19,8 @@ from models.permisos import ADMINISTRADOR_ALMACEN
 from models.productos import Producto
 
 from .sesiones import Sesion
+
+logger = obtener_logger("asistente_compras.administracion")
 
 _CABECERAS_OBLIGATORIAS = {"tipo_producto", "nombre", "precio", "presentacion"}
 _CABECERAS_PERMITIDAS = _CABECERAS_OBLIGATORIAS | {"marca_variedad"}
@@ -101,10 +105,12 @@ class ControladorAdminAlmacen:
         validador: ServicioValidacion,
         *,
         max_csv_bytes: int = 1_000_000,
+        imagenes: ServicioImagenesProducto | None = None,
     ) -> None:
         self.repo = repositorio
         self.validador = validador
         self.max_csv_bytes = int(max_csv_bytes)
+        self.imagenes = imagenes
 
     def _almacen_de(self, sesion: Sesion) -> str:
         if not sesion.almacen_id:
@@ -112,6 +118,15 @@ class ControladorAdminAlmacen:
         if str(sesion.almacen_id) != self.repo.almacen_id:
             raise NoPermitido("no puedes operar sobre otro almacén", rol=sesion.rol)
         return self.repo.almacen_id
+
+    @property
+    def max_imagen_bytes(self) -> int:
+        return self.imagenes.max_bytes if self.imagenes is not None else 2_000_000
+
+    def _servicio_imagenes(self) -> ServicioImagenesProducto:
+        if self.imagenes is None or not self.imagenes.configurado:
+            raise ServicioNoDisponible("La carga de imágenes no está configurada en el servidor")
+        return self.imagenes
 
     # Productos ---------------------------------------------------------
     def listar_productos(self, sesion: Sesion) -> list[dict[str, Any]]:
@@ -160,14 +175,85 @@ class ControladorAdminAlmacen:
         except ValueError as error:
             raise SolicitudInvalida(str(error)) from error
         actualizado.creado_en = actual.creado_en
+        actualizado.imagen_url = actual.imagen_url
+        actualizado.imagen_public_id = actual.imagen_public_id
         locales = self.repo.presentaciones_del_tipo(actualizado.tipo_normalizado)
         self.validador.validar_presentacion(actualizado, locales=locales, excluir_id=producto_id)
         self.repo.guardar_producto(actualizado)
         return actualizado.publico()
 
+    def subir_imagen_producto(
+        self,
+        sesion: Sesion,
+        producto_id: str,
+        contenido: bytes,
+    ) -> dict[str, Any]:
+        almacen_id = self._almacen_de(sesion)
+        producto = self.repo.obtener_producto(producto_id)
+        if producto is None:
+            raise NoEncontrado("Producto no encontrado")
+        servicio = self._servicio_imagenes()
+
+        nueva = servicio.subir(
+            almacen_id=almacen_id,
+            producto_id=producto.producto_id,
+            contenido=contenido,
+        )
+        anterior = producto.imagen_public_id
+        producto.imagen_url = nueva["imagen_url"]
+        producto.imagen_public_id = nueva["imagen_public_id"]
+        try:
+            self.repo.guardar_producto(producto)
+        except Exception:
+            # Si MongoDB no guarda la referencia, se retira el activo nuevo
+            # para no dejar huérfanos en Cloudinary.
+            try:
+                servicio.eliminar(nueva["imagen_public_id"])
+            except Exception:  # pragma: no cover - limpieza defensiva
+                logger.warning("No se pudo limpiar la imagen nueva en Cloudinary")
+            raise
+        if anterior and anterior != producto.imagen_public_id:
+            try:
+                servicio.eliminar(anterior)
+            except Exception:  # pragma: no cover - el producto ya quedó actualizado
+                logger.warning("No se pudo eliminar la imagen anterior %s", anterior)
+        return producto.publico()
+
+    def eliminar_imagen_producto(self, sesion: Sesion, producto_id: str) -> dict[str, Any]:
+        self._almacen_de(sesion)
+        producto = self.repo.obtener_producto(producto_id)
+        if producto is None:
+            raise NoEncontrado("Producto no encontrado")
+        if not producto.imagen_public_id:
+            producto.imagen_url = ""
+            producto.imagen_public_id = ""
+            self.repo.guardar_producto(producto)
+            return producto.publico()
+
+        public_id = producto.imagen_public_id
+        producto.imagen_url = ""
+        producto.imagen_public_id = ""
+        self.repo.guardar_producto(producto)
+        try:
+            self._servicio_imagenes().eliminar(public_id)
+        except Exception:
+            logger.warning("No se pudo eliminar la imagen %s de Cloudinary", public_id)
+        return producto.publico()
+
     def eliminar_producto(self, sesion: Sesion, producto_id: str) -> None:
         self._almacen_de(sesion)
+        producto = self.repo.obtener_producto(producto_id)
+        if producto is None:
+            raise NoEncontrado("Producto no encontrado")
         self.repo.eliminar_producto(producto_id)
+        if producto.imagen_public_id:
+            try:
+                self._servicio_imagenes().eliminar(producto.imagen_public_id)
+            except Exception:
+                logger.warning(
+                    "No se pudo eliminar la imagen %s del producto eliminado",
+                    producto.imagen_public_id,
+                )
 
     def importar_csv(self, sesion: Sesion, contenido: str) -> dict[str, Any]:
         almacen_id = self._almacen_de(sesion)

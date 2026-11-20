@@ -32,6 +32,8 @@ class Producto:
     precio: float
     presentacion: str
     marca_variedad: str = ""
+    imagen_url: str = ""
+    imagen_public_id: str = ""
     creado_en: datetime | None = None
     actualizado_en: datetime | None = None
 
@@ -89,6 +91,7 @@ class Producto:
             "marca_variedad": self.marca_variedad,
             "precio": self.precio,
             "presentacion": self.presentacion,
+            "imagen_url": self.imagen_url,
         }
 
 

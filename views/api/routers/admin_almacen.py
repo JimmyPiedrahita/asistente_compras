@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 
 from controllers.administracion import ControladorAdminAlmacen
 from controllers.compras import ControladorComprasAlmacen
@@ -68,6 +68,32 @@ def eliminar_producto(
     admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
 ) -> None:
     admin.eliminar_producto(sesion, producto_id)
+
+
+@router.post(
+    "/admin-almacen/productos/{producto_id}/imagen",
+    response_model=ProductoPublico,
+)
+async def subir_imagen_producto(
+    producto_id: str,
+    archivo: UploadFile = File(description="Imagen JPEG, PNG o WebP de hasta 2 MB."),
+    sesion: Sesion = Depends(requerir_admin_almacen),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
+) -> dict:
+    contenido = await archivo.read(admin.max_imagen_bytes + 1)
+    return admin.subir_imagen_producto(sesion, producto_id, contenido)
+
+
+@router.delete(
+    "/admin-almacen/productos/{producto_id}/imagen",
+    response_model=ProductoPublico,
+)
+def eliminar_imagen_producto(
+    producto_id: str,
+    sesion: Sesion = Depends(requerir_admin_almacen),
+    admin: ControladorAdminAlmacen = Depends(obtener_admin_almacen),
+) -> dict:
+    return admin.eliminar_imagen_producto(sesion, producto_id)
 
 
 @router.post(

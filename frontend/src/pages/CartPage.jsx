@@ -311,6 +311,21 @@ export default function CartPage({ onNavigate }) {
                 <ul className="divide-y divide-stone-100">
                   {parte.items.map((item) => (
                     <li key={item.item_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                      {item.imagen_url ? (
+                        <img
+                          src={item.imagen_url}
+                          alt={`Imagen de ${item.nombre}`}
+                          loading="lazy"
+                          className="h-11 w-11 shrink-0 rounded-lg object-cover ring-1 ring-stone-200"
+                        />
+                      ) : (
+                        <span
+                          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-dashed border-stone-200 bg-stone-50 text-stone-300"
+                          aria-hidden="true"
+                        >
+                          <Icon name="package" size={17} />
+                        </span>
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-stone-900">{item.nombre}</p>
                         <p className="mt-0.5 text-xs text-stone-500">

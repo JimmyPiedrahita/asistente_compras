@@ -81,7 +81,12 @@ def construir_contexto(settings: Settings) -> ContextoAplicacion:
     directorio = DirectorioAlmacenes(repo_almacenes, fabrica, conexiones)
     aprovisionamiento = ServicioAprovisionamiento(settings, fabrica, conexiones, repo_almacenes)
     sincronizador = SincronizadorCatalogo(
-        settings, fabrica, conexiones, repo_almacenes, repo_replica
+        settings,
+        fabrica,
+        conexiones,
+        repo_almacenes,
+        repo_replica,
+        aprovisionamiento,
     )
     proyector = ProyectorCompras(
         settings,
@@ -90,6 +95,7 @@ def construir_contexto(settings: Settings) -> ContextoAplicacion:
         repo_almacenes,
         repo_compras,
         repo_estado_compras,
+        aprovisionamiento,
     )
 
     logger.info(

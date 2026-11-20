@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from controllers.sesiones import RegistroSesiones
 from core.config import Settings
 from core.logging import configurar_logging, obtener_logger
+from infrastructure.imagenes import ServicioImagenesProducto
 from infrastructure.mongodb.contexto import ContextoAplicacion, construir_contexto
 
 from .errors import registrar_manejadores
@@ -81,6 +82,7 @@ def create_app(
     app.state.contexto = contexto
     app.state.sesiones = sesiones
     app.state.settings = settings
+    app.state.imagenes = ServicioImagenesProducto.desde_settings(settings)
 
     origenes = list(settings.cors_origins)
     app.add_middleware(

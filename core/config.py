@@ -105,6 +105,11 @@ class Settings:
     session_ttl_seconds: int = 3600
     max_sessions: int = 1000
     max_csv_bytes: int = 1_000_000
+    max_product_image_bytes: int = 2_000_000
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+    cloudinary_folder: str = "asistente-compras"
     log_level: str = "INFO"
 
     def __post_init__(self) -> None:
@@ -170,6 +175,26 @@ class Settings:
             raise ConfiguracionInvalida("MAX_SESSIONS debe ser positivo")
         if self.max_csv_bytes < 1:
             raise ConfiguracionInvalida("MAX_CSV_BYTES debe ser positivo")
+        if self.max_product_image_bytes < 1:
+            raise ConfiguracionInvalida("MAX_PRODUCT_IMAGE_BYTES debe ser positivo")
+        if not self.cloudinary_folder.strip():
+            raise ConfiguracionInvalida("CLOUDINARY_FOLDER no puede estar vacío")
+        credenciales_cloudinary = (
+            self.cloudinary_cloud_name,
+            self.cloudinary_api_key,
+            self.cloudinary_api_secret,
+        )
+        if any(credenciales_cloudinary) and not all(credenciales_cloudinary):
+            raise ConfiguracionInvalida(
+                "CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET "
+                "deben configurarse juntas"
+            )
+
+    @property
+    def cloudinary_configurado(self) -> bool:
+        return bool(
+            self.cloudinary_cloud_name and self.cloudinary_api_key and self.cloudinary_api_secret
+        )
 
     @classmethod
     def from_env(
@@ -260,6 +285,12 @@ class Settings:
             session_ttl_seconds=_leer_int(env, "SESSION_TTL_SECONDS", 3600),
             max_sessions=_leer_int(env, "MAX_SESSIONS", 1000),
             max_csv_bytes=_leer_int(env, "MAX_CSV_BYTES", 1_000_000),
+            max_product_image_bytes=_leer_int(env, "MAX_PRODUCT_IMAGE_BYTES", 2_000_000),
+            cloudinary_cloud_name=_texto(env, "CLOUDINARY_CLOUD_NAME"),
+            cloudinary_api_key=_texto(env, "CLOUDINARY_API_KEY"),
+            cloudinary_api_secret=_texto(env, "CLOUDINARY_API_SECRET"),
+            cloudinary_folder=_texto(env, "CLOUDINARY_FOLDER", "asistente-compras")
+            or "asistente-compras",
             log_level=_texto(env, "LOG_LEVEL", "INFO") or "INFO",
         )
 

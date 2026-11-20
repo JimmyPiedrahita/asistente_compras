@@ -41,6 +41,8 @@ class PruebasConfiguracion(unittest.TestCase):
         self.assertEqual(settings.admin_password, "clave-segura")
         self.assertEqual(settings.session_ttl_seconds, 3600)
         self.assertEqual(settings.max_sessions, 1000)
+        self.assertFalse(settings.cloudinary_configurado)
+        self.assertEqual(settings.max_product_image_bytes, 2_000_000)
 
     def test_valores_personalizados(self) -> None:
         settings = Settings.from_env(
@@ -56,6 +58,11 @@ class PruebasConfiguracion(unittest.TestCase):
                 "MONGODB_TIMEOUT_MS": "1500",
                 "LISTENER_REFRESH_SECONDS": "7",
                 "ADMIN_NOMBRE": "Administrador",
+                "CLOUDINARY_CLOUD_NAME": "demo",
+                "CLOUDINARY_API_KEY": "clave",
+                "CLOUDINARY_API_SECRET": "secreto",
+                "CLOUDINARY_FOLDER": "tienda/productos",
+                "MAX_PRODUCT_IMAGE_BYTES": "1048576",
             }
         )
         self.assertEqual(settings.mongodb_global_db, "global_tienda")
@@ -67,6 +74,10 @@ class PruebasConfiguracion(unittest.TestCase):
         self.assertEqual(settings.max_csv_bytes, 2048)
         self.assertEqual(settings.mongodb_timeout_ms, 1500)
         self.assertEqual(settings.listener_refresh_seconds, 7)
+        self.assertEqual(settings.cloudinary_cloud_name, "demo")
+        self.assertEqual(settings.cloudinary_folder, "tienda/productos")
+        self.assertEqual(settings.max_product_image_bytes, 1048576)
+        self.assertTrue(settings.cloudinary_configurado)
 
     def test_modo_pruebas_por_uri(self) -> None:
         # Compatibilidad: sin MONGODB_HOST, un MONGODB_URI activa el modo de
@@ -111,6 +122,10 @@ class PruebasConfiguracion(unittest.TestCase):
             Settings.from_env({**ENTORNO, "MAX_SESSIONS": "abc"})
         with self.assertRaises(ConfiguracionInvalida):
             Settings.from_env({**ENTORNO, "MONGODB_TIMEOUT_MS": "50"})
+        with self.assertRaises(ConfiguracionInvalida):
+            Settings.from_env({**ENTORNO, "MAX_PRODUCT_IMAGE_BYTES": "0"})
+        with self.assertRaises(ConfiguracionInvalida):
+            Settings.from_env({**ENTORNO, "CLOUDINARY_CLOUD_NAME": "demo"})
 
     def test_configuracion_de_pruebas(self) -> None:
         settings = Settings.de_pruebas(mongodb_db="pruebas")

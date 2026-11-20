@@ -45,6 +45,8 @@ def _producto_documento(producto: Producto) -> dict[str, Any]:
         "precio": producto.precio,
         "presentacion": producto.presentacion,
         "presentacion_normalizada": producto.presentacion_normalizada,
+        "imagen_url": producto.imagen_url,
+        "imagen_public_id": producto.imagen_public_id,
         "creado_en": producto.creado_en or _ahora(),
         "actualizado_en": producto.actualizado_en or _ahora(),
     }
@@ -59,6 +61,8 @@ def _producto(documento: dict[str, Any]) -> Producto:
         marca_variedad=str(documento.get("marca_variedad", "")),
         precio=documento.get("precio"),
         presentacion=str(documento.get("presentacion", "")),
+        imagen_url=str(documento.get("imagen_url", "") or ""),
+        imagen_public_id=str(documento.get("imagen_public_id", "") or ""),
         creado_en=documento.get("creado_en"),
         actualizado_en=documento.get("actualizado_en"),
     )

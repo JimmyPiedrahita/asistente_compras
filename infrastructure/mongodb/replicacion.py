@@ -45,12 +45,14 @@ class SincronizadorCatalogo:
         conexiones: ConexionesMongo,
         repo_almacenes: RepositorioAlmacenes,
         repo_replica: RepositorioReplicaCatalogo,
+        aprovisionamiento: Any = None,
     ) -> None:
         self.settings = settings
         self.fabrica = fabrica
         self.conexiones = conexiones
         self.repo_almacenes = repo_almacenes
         self.repo_replica = repo_replica
+        self.aprovisionamiento = aprovisionamiento
         self._detener = threading.Event()
         self._hilo: threading.Thread | None = None
         self._trabajadores: dict[str, threading.Thread] = {}
@@ -191,6 +193,8 @@ class SincronizadorCatalogo:
                 self.repo_replica.upsert_cupon(almacen, documento)
 
     def reconciliar_almacen(self, almacen: Any) -> None:
+        if self.aprovisionamiento is not None:
+            self.aprovisionamiento.asegurar_privilegios_catalogo(almacen)
         cliente = self.conexiones.cliente(self.fabrica.uri_catalogo())
         base = cliente.base(almacen.db_name)
         productos = list(base["productos"].find({}))
@@ -231,6 +235,7 @@ class ProyectorCompras:
         repo_almacenes: RepositorioAlmacenes,
         repo_compras: RepositorioComprasGlobal,
         repo_estado: RepositorioEstadoCompras,
+        aprovisionamiento: Any = None,
     ) -> None:
         self.settings = settings
         self.fabrica = fabrica
@@ -238,6 +243,7 @@ class ProyectorCompras:
         self.repo_almacenes = repo_almacenes
         self.repo_compras = repo_compras
         self.repo_estado = repo_estado
+        self.aprovisionamiento = aprovisionamiento
         self._detener = threading.Event()
         self._hilo: threading.Thread | None = None
 
@@ -309,6 +315,8 @@ class ProyectorCompras:
             almacen = self.repo_almacenes.obtener(almacen_id)
             if almacen is None or not almacen.db_name:
                 continue
+            if self.aprovisionamiento is not None:
+                self.aprovisionamiento.asegurar_privilegios_compras(almacen)
             items = [
                 {
                     "producto_id": item.get("producto_id"),
