@@ -384,6 +384,9 @@ base y su usuario nativo.
 `/auth/me`, gestiona el cierre de sesión y muestra notificaciones. `api.js`
 centraliza las llamadas HTTP y normaliza los errores.
 
+Las sesiones del backend se almacenan en memoria. Reiniciar la API invalida las
+sesiones existentes y obliga a iniciar sesión nuevamente.
+
 En producción, `create_app()` monta `frontend/dist` y sirve `index.html` para las
 rutas de la SPA. En desarrollo, Vite redirige `/api` al backend.
 
@@ -407,6 +410,8 @@ Servicios de `docker-compose.yml`:
   keyfile.
 - `docker compose down -v` elimina contenedores y datos.
 - La API expone `/api/v1/health/ready` para el healthcheck del contenedor.
+- La API se publica únicamente en `127.0.0.1:8000`; los despliegues públicos
+  deben ubicarse detrás de un proxy HTTPS.
 - El frontend se compila en una etapa Node del `Dockerfile`.
 - Los scripts operativos se ejecutan con
   `docker compose run --rm tools python scripts/<script>.py`.

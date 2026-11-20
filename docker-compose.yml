@@ -5,6 +5,7 @@ x-credenciales-mongo: &credenciales-mongo
   MONGODB_GLOBAL_DB: ${MONGODB_GLOBAL_DB:-global_asistente_compras}
   MONGODB_ALMACEN_PREFIX: ${MONGODB_ALMACEN_PREFIX:-almacen_}
   MONGODB_WAREHOUSE_SECRET: ${MONGODB_WAREHOUSE_SECRET:?Define MONGODB_WAREHOUSE_SECRET en .env}
+  MONGODB_WAREHOUSE_SECRET_ANTERIOR: ${MONGODB_WAREHOUSE_SECRET_ANTERIOR:-}
   MONGODB_TIMEOUT_MS: ${MONGODB_TIMEOUT_MS:-5000}
   MONGO_CLIENTE_USER: ${MONGO_CLIENTE_USER:-cliente_app}
   MONGO_CLIENTE_PASSWORD: ${MONGO_CLIENTE_PASSWORD:?Define MONGO_CLIENTE_PASSWORD en .env}
@@ -144,7 +145,7 @@ services:
     environment:
       <<: *entorno-app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       mongo-init:
         condition: service_completed_successfully

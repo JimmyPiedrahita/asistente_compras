@@ -1,8 +1,9 @@
 """Rotación de las contraseñas HMAC de todos los almacenes.
 
 Uso:
-    MONGODB_WAREHOUSE_SECRET=<secreto-nuevo> \\
-        python scripts/rotar_secretos_almacenes.py --anterior <secreto-anterior>
+    MONGODB_WAREHOUSE_SECRET=<secreto-nuevo> \
+    MONGODB_WAREHOUSE_SECRET_ANTERIOR=<secreto-anterior> \
+        python scripts/rotar_secretos_almacenes.py
 
 El script usa el usuario ``provisioner`` para actualizar la contraseña nativa de
 cada almacén. No guarda ni imprime contraseñas. Al terminar, actualiza
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import os
 import sys
 from pathlib import Path
 
@@ -35,18 +37,7 @@ logger = obtener_logger("asistente_compras.rotar_secretos")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--anterior",
-        default="",
-        help="Secreto anterior. Solo se usa para verificar que la rotación es intencional.",
-    )
-    parser.add_argument(
-        "--nuevo",
-        default="",
-        help="Secreto nuevo. Si se omite, se usa MONGODB_WAREHOUSE_SECRET.",
-    )
-    args = parser.parse_args()
+    argparse.ArgumentParser(description=__doc__).parse_args()
 
     settings = Settings.from_env()
     configurar_logging(settings.log_level)
@@ -54,8 +45,8 @@ def main() -> int:
         print("La rotación solo aplica al modo con usuarios nativos de MongoDB.")
         return 2
 
-    nuevo = str(args.nuevo or settings.mongodb_warehouse_secret).strip()
-    anterior = str(args.anterior or "").strip()
+    nuevo = settings.mongodb_warehouse_secret.strip()
+    anterior = os.environ.get("MONGODB_WAREHOUSE_SECRET_ANTERIOR", "").strip()
     if len(nuevo) < 32:
         print("El secreto nuevo debe tener al menos 32 caracteres.")
         return 2

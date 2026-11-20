@@ -212,6 +212,7 @@ make test
 | `MONGODB_GLOBAL_DB` | No | Base global. Por defecto `global_asistente_compras`. |
 | `MONGODB_ALMACEN_PREFIX` | No | Prefijo de las bases por almacén. Por defecto `almacen_`. |
 | `MONGODB_WAREHOUSE_SECRET` | Sí | Secreto maestro HMAC, mínimo 32 caracteres. |
+| `MONGODB_WAREHOUSE_SECRET_ANTERIOR` | Solo rotación | Secreto anterior usado para confirmar la rotación; nunca se pasa como argumento. |
 | `MONGO_CLIENTE_USER/PASSWORD` | Sí | Usuario compartido de los clientes. |
 | `MONGO_ADMIN_APP_USER/PASSWORD` | Sí | Usuario del administrador de la aplicación. |
 | `MONGO_AUTH_USER/PASSWORD` | Sí | Usuario del servicio de autenticación. |
@@ -228,6 +229,9 @@ make test
 | `SESSION_TTL_SECONDS` | No | Vida de la sesión en memoria. Por defecto 3600. |
 | `MAX_SESSIONS` | No | Máximo de sesiones simultáneas. Por defecto 1000. |
 | `MAX_CSV_BYTES` | No | Tamaño máximo del CSV. Por defecto 1 000 000. |
+| `CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET` | No | Credenciales del servidor para subir imágenes; si faltan, las imágenes responden 503. |
+| `CLOUDINARY_FOLDER` | No | Carpeta raíz de imágenes. Por defecto `asistente-compras`. |
+| `MAX_PRODUCT_IMAGE_BYTES` | No | Tamaño máximo por imagen. Por defecto 2 000 000 bytes. |
 | `MONGODB_TIMEOUT_MS` | No | Tiempo de espera de MongoDB. Por defecto 5000. |
 | `LISTENER_REFRESH_SECONDS` | No | Frecuencia con la que el listener busca almacenes nuevos. Por defecto 15. |
 | `LOG_LEVEL` | No | Nivel de logging. |
@@ -242,7 +246,8 @@ se envían al frontend ni aparecen en la API.
 ## API
 
 Prefijo: `/api/v1`. La autenticación usa `Authorization: Bearer <session_id>`.
-El contrato público no cambió respecto a la versión anterior.
+El contrato público incluye los endpoints de imagen de productos descritos abajo
+cuando Cloudinary está configurado.
 
 ### Salud y autenticación
 
@@ -275,6 +280,8 @@ El contrato público no cambió respecto a la versión anterior.
 | GET/POST | `/admin-almacen/productos` | Listar o crear productos. |
 | PATCH/DELETE | `/admin-almacen/productos/{id}` | Editar o eliminar. |
 | POST | `/admin-almacen/productos/importar` | Importar CSV. |
+| POST | `/admin-almacen/productos/{id}/imagen` | Subir o reemplazar una imagen. |
+| DELETE | `/admin-almacen/productos/{id}/imagen` | Eliminar la imagen. |
 | GET/POST | `/admin-almacen/cupones` | Listar o crear cupones. |
 | DELETE | `/admin-almacen/cupones/{id}` | Eliminar cupón. |
 | GET | `/admin-almacen/compras` | Compras de su almacén. |
@@ -327,12 +334,17 @@ Si se cambia `MONGODB_WAREHOUSE_SECRET`, hay que rotar las contraseñas nativas 
 los almacenes con el secreto anterior:
 
 ```bash
-docker compose run --rm tools python scripts/rotar_secretos_almacenes.py \
-  --anterior <secreto-anterior>
+docker compose run --rm tools python scripts/rotar_secretos_almacenes.py
 ```
 
 Después se actualiza `MONGODB_WAREHOUSE_SECRET` en el entorno y se reinician la
-API y el listener. El script no imprime contraseñas.
+API y el listener. El script no imprime contraseñas. Usa un gestor de secretos
+o un `.env` protegido; no pases los secretos como argumentos CLI ni los copies
+directamente en el historial de shell.
+
+Por seguridad, el Compose enlaza el puerto de la API solo a `127.0.0.1` en el
+host. En despliegues accesibles desde otras máquinas, ejecuta la API detrás de
+un proxy HTTPS y no publiques el puerto HTTP directamente.
 
 ## Pruebas
 

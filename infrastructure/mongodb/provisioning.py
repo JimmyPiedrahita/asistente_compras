@@ -140,9 +140,7 @@ class ServicioAprovisionamiento:
                 if error.code not in _YA_EXISTE:
                     raise
         except PyMongoError as error:
-            raise ServicioNoDisponible(
-                "No se pudieron reparar los permisos de compras"
-            ) from error
+            raise ServicioNoDisponible("No se pudieron reparar los permisos de compras") from error
 
     def _crear_rol_almacen(self, base: Any, db_name: str) -> None:
         privilegios = [
