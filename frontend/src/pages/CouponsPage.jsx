@@ -91,7 +91,7 @@ export default function CouponsPage() {
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[360px_1fr] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[320px_1fr] lg:items-start">
       <Card
         title="Crear cupón"
         description="El cupón pertenece automáticamente a tu almacén y no puede editarse después."

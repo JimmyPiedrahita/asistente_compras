@@ -117,7 +117,7 @@ export default function ShoppingListPage({ onNavigate }) {
     resultado && resultado.hay_productos && resultado.total_resultados === 0;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[360px_1fr] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[320px_1fr] lg:items-start">
       <Card
         title="Mi lista de compras"
         description="Anota los productos que necesitas y luego compáralos entre almacenes."

@@ -57,7 +57,7 @@ export default function WarehousesPage() {
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[360px_1fr] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[320px_1fr] lg:items-start">
       <Card
         title="Crear almacén"
         description="La creación de un almacén no genera productos ni cupones automáticamente."

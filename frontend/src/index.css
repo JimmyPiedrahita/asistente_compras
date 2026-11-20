@@ -10,12 +10,27 @@ html {
 }
 
 body {
-  @apply bg-stone-50 text-stone-900 antialiased;
-  line-height: 1.6;
+  @apply bg-stone-100 text-stone-900 antialiased;
+  line-height: 1.5;
 }
 
 ::selection {
-  @apply bg-sky-200 text-sky-900;
+  @apply bg-yellow-200 text-stone-900;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #3483fa;
+  outline-offset: 2px;
 }
 
 /* Scrollbar sutil para paneles de resultados */
@@ -60,4 +75,18 @@ body {
 
 .animate-fade {
   animation: fade-in 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

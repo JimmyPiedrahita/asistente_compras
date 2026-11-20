@@ -48,20 +48,20 @@ function Header({ page, onNavigate }) {
 
   return (
     <header className="sticky top-0 z-30 bg-[#ffe600] shadow-sm">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6">
         <button
           onClick={() => onNavigate(items[0]?.id)}
           className="flex items-center gap-2 text-left"
           aria-label="Ir al inicio"
         >
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#3483fa] text-white">
-            <Icon name="cart" size={20} />
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#3483fa] text-white">
+            <Icon name="cart" size={18} />
           </span>
           <span>
-            <span className="block text-base font-bold leading-tight text-stone-900">
+            <span className="block text-sm font-bold leading-tight text-stone-900">
               Asistente de Compras
             </span>
-            <span className="block text-xs font-medium text-stone-700">
+            <span className="block text-[11px] font-medium text-stone-700">
               Compara entre almacenes y ahorra
             </span>
           </span>
@@ -87,7 +87,7 @@ function Header({ page, onNavigate }) {
       </div>
 
       <nav className={`border-t border-yellow-300 bg-[#fff45c] ${menuOpen ? "block" : "hidden"} lg:block`}>
-        <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-2 sm:flex-row sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-1.5 sm:flex-row sm:px-6">
           {items.map((item) => (
             <button
               key={item.id}
@@ -95,7 +95,7 @@ function Header({ page, onNavigate }) {
                 onNavigate(item.id);
                 setMenuOpen(false);
               }}
-              className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 page === item.id
                   ? "bg-white/90 text-stone-900 shadow-sm"
                   : "text-stone-800 hover:bg-white/60"
@@ -133,7 +133,7 @@ function Shell() {
   return (
     <div className="min-h-screen bg-stone-100">
       <Header page={page} onNavigate={setPage} />
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+      <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-6">
         <div key={page} className="animate-fade">
           {Page ? <Page onNavigate={setPage} /> : null}
         </div>

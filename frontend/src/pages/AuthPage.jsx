@@ -14,6 +14,31 @@ const initialRegister = {
   autoriza_datos: false,
 };
 
+function PasswordInput({ value, onChange, ...props }) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="relative">
+      <Input
+        {...props}
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((actual) => !actual)}
+        className="absolute inset-y-0 right-0 grid w-10 place-items-center text-stone-400 transition hover:text-stone-700"
+        aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+        title={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+      >
+        <Icon name={visible ? "eyeOff" : "eye"} size={17} />
+      </button>
+    </div>
+  );
+}
+
 export default function AuthPage() {
   const { login, register, notifyError } = useApp();
   const [modo, setModo] = useState("login");
@@ -21,6 +46,18 @@ export default function AuthPage() {
   const [registro, setRegistro] = useState(initialRegister);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+  const camposRegistro = [
+    "nombre",
+    "email",
+    "password",
+    "password_confirmacion",
+    "telefono",
+    "direccion",
+    "ciudad",
+  ];
+  const registroCompleto =
+    camposRegistro.every((nombre) => registro[nombre].trim().length > 0) &&
+    registro.autoriza_datos;
 
   const enviarLogin = async (evento) => {
     evento.preventDefault();
@@ -71,12 +108,12 @@ export default function AuthPage() {
   });
 
   return (
-    <div className="mx-auto grid min-h-screen max-w-6xl items-start gap-8 px-4 py-6 sm:py-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-16">
-      <section className="text-center lg:text-left">
+    <div className="mx-auto grid min-h-screen max-w-5xl items-start gap-6 px-4 py-6 sm:py-8 lg:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)] lg:items-center lg:gap-10 lg:py-10">
+      <section className="mx-auto flex w-full max-w-md flex-col text-center lg:mx-0 lg:max-w-none lg:text-left">
         <div className="inline-flex items-center gap-2 rounded-full bg-[#ffe600] px-4 py-1.5 text-xs font-bold text-stone-900">
           <Icon name="sparkles" size={14} /> Compra inteligente
         </div>
-        <h1 className="mt-5 text-3xl font-bold leading-tight tracking-tight text-stone-900 sm:text-4xl lg:text-5xl">
+        <h1 className="mt-4 max-w-2xl text-3xl font-bold leading-tight tracking-tight text-stone-900 sm:text-4xl">
           Arma tu lista, compara precios y compra en varios almacenes.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-stone-600">
@@ -84,13 +121,13 @@ export default function AuthPage() {
           aplica cupones por almacén y finaliza con un pago. Cada almacén coordina
           su propia entrega.
         </p>
-        <div className="mx-auto mt-6 grid max-w-lg grid-cols-3 gap-2.5 sm:mt-7 sm:gap-3 lg:mx-0">
+        <div className="mx-auto mt-5 grid w-full grid-cols-3 gap-2 sm:mt-6 lg:mx-0">
           {[
             { icon: "list", title: "Tu lista", text: "Anota lo que necesitas comprar." },
             { icon: "search", title: "Compara", text: "Filtra por precio y almacén." },
             { icon: "cart", title: "Compra", text: "Un pago por todas tus compras" },
           ].map((item) => (
-            <div key={item.title} className="min-w-0 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
+            <div key={item.title} className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
               <span className="grid h-8 w-8 place-items-center rounded-xl bg-sky-100 text-sky-700 sm:h-9 sm:w-9">
                 <Icon name={item.icon} size={17} />
               </span>
@@ -101,14 +138,14 @@ export default function AuthPage() {
         </div>
       </section>
 
-      <section className="w-full max-w-md justify-self-center rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-7 lg:justify-self-end">
-        <div className="mb-5 grid grid-cols-2 rounded-xl bg-stone-100 p-1">
+      <section className="mx-auto flex w-full max-w-md flex-col justify-self-center rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 lg:mx-0 lg:max-w-sm lg:justify-self-end">
+        <div className="mb-4 grid grid-cols-2 rounded-lg bg-stone-100 p-1">
           <button
             onClick={() => {
               setModo("login");
               setError("");
             }}
-            className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+            className={`rounded-md px-3 py-2 text-sm font-medium transition ${
               modo === "login" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500"
             }`}
           >
@@ -119,7 +156,7 @@ export default function AuthPage() {
               setModo("registro");
               setError("");
             }}
-            className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+            className={`rounded-md px-3 py-2 text-sm font-medium transition ${
               modo === "registro" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500"
             }`}
           >
@@ -134,7 +171,7 @@ export default function AuthPage() {
         )}
 
         {modo === "login" ? (
-          <form onSubmit={enviarLogin} className="space-y-4">
+          <form onSubmit={enviarLogin} className="space-y-3.5">
             <Field label="Correo electrónico" htmlFor="login-email">
               <Input
                 id="login-email"
@@ -149,9 +186,8 @@ export default function AuthPage() {
               />
             </Field>
             <Field label="Contraseña" htmlFor="login-password">
-              <Input
+              <PasswordInput
                 id="login-password"
-                type="password"
                 autoComplete="current-password"
                 required
                 value={loginForm.password}
@@ -166,8 +202,8 @@ export default function AuthPage() {
             </Button>
           </form>
         ) : (
-          <form onSubmit={enviarRegistro} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+          <form onSubmit={enviarRegistro} className="space-y-3.5">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Nombre" htmlFor="reg-nombre" className="sm:col-span-2">
                 <Input id="reg-nombre" required autoComplete="name" {...campo("nombre")} />
               </Field>
@@ -178,9 +214,8 @@ export default function AuthPage() {
                 <Input id="reg-telefono" required autoComplete="tel" {...campo("telefono")} />
               </Field>
               <Field label="Contraseña" htmlFor="reg-password">
-                <Input
+                <PasswordInput
                   id="reg-password"
-                  type="password"
                   required
                   minLength={6}
                   autoComplete="new-password"
@@ -188,9 +223,8 @@ export default function AuthPage() {
                 />
               </Field>
               <Field label="Confirmar contraseña" htmlFor="reg-password2">
-                <Input
+                <PasswordInput
                   id="reg-password2"
-                  type="password"
                   required
                   minLength={6}
                   autoComplete="new-password"
@@ -223,7 +257,13 @@ export default function AuthPage() {
                 compra y el pago quedan registrados.
               </span>
             </label>
-            <Button type="submit" size="lg" className="w-full" loading={cargando}>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              loading={cargando}
+              disabled={!registroCompleto}
+            >
               Crear cuenta
             </Button>
           </form>

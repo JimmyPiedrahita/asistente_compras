@@ -248,7 +248,7 @@ export default function AdminsPage() {
   }
 
   return (
-    <div className="grid min-w-0 gap-5 lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
       <Card
         className="min-w-0"
         title="Crear administrador de almacén"

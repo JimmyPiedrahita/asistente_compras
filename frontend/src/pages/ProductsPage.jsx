@@ -160,7 +160,7 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 lg:grid-cols-[400px_1fr] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[340px_1fr] lg:items-start">
         <Card
           title={editandoId ? "Editar producto" : "Agregar producto"}
           description="El almacén propietario se asigna automáticamente a tu cuenta."

@@ -275,7 +275,7 @@ export default function CartPage({ onNavigate }) {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_390px] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[1fr_360px] lg:items-start">
       <div className="space-y-4">
         <Card
           title={`Carrito · ${resumen.cantidad_items} ${

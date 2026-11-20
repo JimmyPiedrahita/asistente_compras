@@ -37,9 +37,9 @@ const buttonVariants = {
 };
 
 const buttonSizes = {
-  sm: "px-3 py-1.5 text-xs",
-  md: "px-4 py-2.5 text-sm",
-  lg: "px-5 py-3 text-sm",
+  sm: "min-h-8 px-2.5 py-1.5 text-xs",
+  md: "min-h-9 px-3 py-2 text-sm",
+  lg: "min-h-10 px-4 py-2.5 text-sm",
 };
 
 export function Button({
@@ -58,7 +58,7 @@ export function Button({
     <button
       type={type}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-900/10 disabled:cursor-not-allowed disabled:opacity-40 ${buttonVariants[variant]} ${buttonSizes[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3483fa]/30 disabled:cursor-not-allowed disabled:opacity-40 ${buttonVariants[variant]} ${buttonSizes[size]} ${className}`}
       {...props}
     >
       {loading ? <Spinner size={size === "sm" ? 13 : 15} /> : icon ? <Icon name={icon} size={size === "sm" ? 14 : 16} /> : null}
@@ -73,10 +73,10 @@ export function Button({
 export function Card({ title, description, actions, children, className = "", bodyClassName = "" }) {
   return (
     <section
-      className={`overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm ${className}`}
+      className={`overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm ${className}`}
     >
       {(title || description || actions) && (
-        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-5 py-4 sm:px-6">
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-3.5 sm:px-5">
           <div className="min-w-0">
             {title && (
               <h2 className="text-base font-semibold text-stone-900">{title}</h2>
@@ -92,7 +92,7 @@ export function Card({ title, description, actions, children, className = "", bo
           )}
         </header>
       )}
-      <div className={`p-5 sm:p-6 ${bodyClassName}`}>{children}</div>
+      <div className={`p-4 sm:p-5 ${bodyClassName}`}>{children}</div>
     </section>
   );
 }
@@ -100,7 +100,7 @@ export function Card({ title, description, actions, children, className = "", bo
 export function Field({ label, hint, children, className = "", htmlFor }) {
   return (
     <label htmlFor={htmlFor} className={`block ${className}`}>
-      <span className="mb-1 block text-sm font-medium text-stone-600">
+      <span className="mb-1 block text-xs font-semibold text-stone-600">
         {label}
       </span>
       {children}
@@ -110,7 +110,7 @@ export function Field({ label, hint, children, className = "", htmlFor }) {
 }
 
 const controlClasses =
-  "w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 transition focus:border-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/10 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400";
+  "w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 transition focus:border-[#3483fa] focus:outline-none focus:ring-2 focus:ring-[#3483fa]/15 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400";
 
 export function Input({ className = "", ...props }) {
   return <input className={`${controlClasses} ${className}`} {...props} />;
@@ -153,7 +153,7 @@ export function Badge({ children, tone = "slate", className = "" }) {
 
 export function Stat({ label, value, hint, icon }) {
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-stone-500">
@@ -163,7 +163,7 @@ export function Stat({ label, value, hint, icon }) {
           {hint && <p className="mt-1 text-xs text-stone-400">{hint}</p>}
         </div>
         {icon && (
-          <span className="rounded-xl bg-stone-100 p-2.5 text-stone-500">
+          <span className="rounded-lg bg-stone-100 p-2 text-stone-500">
             <Icon name={icon} size={18} />
           </span>
         )}
