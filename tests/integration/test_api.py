@@ -659,9 +659,9 @@ class PruebasAPI(unittest.TestCase):
 
         # Un CSV válido agrega todos los productos.
         contenido_valido = (
-            "tipo_producto,nombre,marca_variedad,precio,presentacion\n"
-            "arroz,Arroz Integral,Diana,2800,500 g\n"
-            "arroz,Arroz Premier,Roa,3200,500 g\n"
+            "tipo_producto,nombre,marca_variedad,precio,presentacion,imagen_url\n"
+            "arroz,Arroz Integral,Diana,2800,500 g,https://placehold.co/600x600/png?text=Arroz\n"
+            "arroz,Arroz Premier,Roa,3200,500 g,https://placehold.co/600x600/png?text=Arroz%20Premier\n"
         )
         respuesta = self.client.post(
             "/api/v1/admin-almacen/productos/importar",
@@ -678,6 +678,12 @@ class PruebasAPI(unittest.TestCase):
             ),
             4,
         )
+        productos = self.client.get(
+            "/api/v1/admin-almacen/productos", headers=datos["admin_central"]
+        ).json()
+        por_nombre = {producto["nombre"]: producto for producto in productos}
+        for nombre in ("Arroz Integral", "Arroz Premier"):
+            self.assertTrue(por_nombre[nombre]["imagen_url"].startswith("https://placehold.co/"))
 
     def test_actualizacion_de_credenciales(self) -> None:
         self._preparar_dos_almacenes()

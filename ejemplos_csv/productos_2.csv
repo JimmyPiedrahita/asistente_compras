@@ -1,10 +1,22 @@
-tipo_producto,nombre,marca_variedad,precio,presentacion
-arroz,Arroz blanco,La Cosecha,5100,500 g
-pasta,Espagueti,La Italiana,3700,500 g
-leche,Leche entera,La Vaquita,4200,1 litro
-aceite,Aceite vegetal,Sol Dorado,9200,1 litro
-detergente,Detergente liquido,LimpioMax,11900,1 litro
-leche,Leche deslactosada,Campo Fresco,4600,1 litro
-yogur,Yogur natural,Vida Sana,5200,1 litro
-yogur,Yogur de fresa,Dulce Dia,5800,1 litro
-queso,Queso campesino,Monte Verde,9800,500 g
+tipo_producto,nombre,marca_variedad,precio,presentacion,imagen_url
+arroz,Arroz blanco,La Cosecha,5100,500 g,https://placehold.co/600x600/png?text=Arroz%20blanco
+arroz,Arroz integral,Granero Natural,6500,500 g,https://placehold.co/600x600/png?text=Arroz%20integral
+arroz,Arroz rojo,La Cosecha,5900,500 g,https://placehold.co/600x600/png?text=Arroz%20rojo
+pasta,Espagueti,La Italiana,3700,500 g,https://placehold.co/600x600/png?text=Espagueti
+pasta,Macarrones,Del Campo,3400,500 g,https://placehold.co/600x600/png?text=Macarrones
+pasta,Lasana,La Italiana,4600,500 g,https://placehold.co/600x600/png?text=Lasana
+leche,Leche entera,La Vaquita,4200,1 litro,https://placehold.co/600x600/png?text=Leche%20entera
+leche,Leche deslactosada,Campo Fresco,4600,1 litro,https://placehold.co/600x600/png?text=Leche%20deslactosada
+leche,Leche de almendras,Verde Vivo,6900,1 litro,https://placehold.co/600x600/png?text=Leche%20almendras
+aceite,Aceite vegetal,Sol Dorado,9200,1 litro,https://placehold.co/600x600/png?text=Aceite%20vegetal
+aceite,Aceite de oliva,Finca Dorada,17200,1 litro,https://placehold.co/600x600/png?text=Aceite%20de%20oliva
+aceite,Aceite de coco,Verde Vivo,14500,1 litro,https://placehold.co/600x600/png?text=Aceite%20de%20coco
+detergente,Detergente liquido,LimpioMax,11900,1 litro,https://placehold.co/600x600/png?text=Detergente%20liquido
+detergente,Detergente para ropa,Brillo Hogar,10900,1 litro,https://placehold.co/600x600/png?text=Detergente%20ropa
+detergente,Detergente en polvo,Fresca Limon,9500,1 litro,https://placehold.co/600x600/png?text=Detergente%20polvo
+yogur,Yogur natural,Vida Sana,5200,1 litro,https://placehold.co/600x600/png?text=Yogur%20natural
+yogur,Yogur de fresa,Dulce Dia,5800,1 litro,https://placehold.co/600x600/png?text=Yogur%20fresa
+yogur,Yogur griego,Dulce Dia,7200,1 litro,https://placehold.co/600x600/png?text=Yogur%20griego
+queso,Queso campesino,Monte Verde,9800,500 g,https://placehold.co/600x600/png?text=Queso%20campesino
+queso,Queso mozzarella,Monte Verde,11200,500 g,https://placehold.co/600x600/png?text=Queso%20mozzarella
+queso,Queso cheddar,La Granja,12400,500 g,https://placehold.co/600x600/png?text=Queso%20cheddar

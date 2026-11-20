@@ -298,14 +298,15 @@ cuando Cloudinary está configurado.
 ## Formato del CSV
 
 ```csv
-tipo_producto,nombre,marca_variedad,precio,presentacion
-arroz,Arroz Diana,Diana,3000,500 g
-leche,Leche entera,Marca de ejemplo,4500,1 litro
+tipo_producto,nombre,marca_variedad,precio,presentacion,imagen_url
+arroz,Arroz Diana,Diana,3000,500 g,https://placehold.co/600x600/png?text=Arroz
+leche,Leche entera,Marca de ejemplo,4500,1 litro,https://placehold.co/600x600/png?text=Leche
 ```
 
 - UTF-8, separador coma, encabezados en la primera fila.
 - `tipo_producto`, `nombre`, `precio` y `presentacion` son obligatorios.
 - `marca_variedad` es opcional.
+- `imagen_url` es opcional. Debe ser una URL HTTP o HTTPS válida.
 - Sin símbolos de moneda ni separadores de miles; decimales con punto.
 - Sin columna de almacén: se asigna el almacén del administrador autenticado.
 - La importación es atómica: si alguna fila falla, se informa la fila y el motivo,

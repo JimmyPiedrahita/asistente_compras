@@ -7,6 +7,7 @@ import io
 import re
 import uuid
 from typing import Any
+from urllib.parse import urlparse
 
 from core.errors import NoEncontrado, NoPermitido, ServicioNoDisponible, SolicitudInvalida
 from core.logging import obtener_logger
@@ -23,7 +24,7 @@ from .sesiones import Sesion
 logger = obtener_logger("asistente_compras.administracion")
 
 _CABECERAS_OBLIGATORIAS = {"tipo_producto", "nombre", "precio", "presentacion"}
-_CABECERAS_PERMITIDAS = _CABECERAS_OBLIGATORIAS | {"marca_variedad"}
+_CABECERAS_PERMITIDAS = _CABECERAS_OBLIGATORIAS | {"marca_variedad", "imagen_url"}
 _PRECIO_VALIDO = re.compile(r"^\d+(?:\.\d+)?$")
 
 
@@ -312,6 +313,7 @@ class ControladorAdminAlmacen:
             marca = campo(fila, "marca_variedad")
             precio_crudo = campo(fila, "precio")
             presentacion = campo(fila, "presentacion")
+            imagen_url = campo(fila, "imagen_url")
 
             if not tipo:
                 errores.append({"fila": numero, "mensaje": "tipo_producto es obligatorio"})
@@ -333,6 +335,16 @@ class ControladorAdminAlmacen:
                     }
                 )
                 continue
+            if imagen_url:
+                url = urlparse(imagen_url)
+                if url.scheme not in {"http", "https"} or not url.netloc:
+                    errores.append(
+                        {
+                            "fila": numero,
+                            "mensaje": "imagen_url debe ser una URL HTTP o HTTPS válida",
+                        }
+                    )
+                    continue
 
             tipo_norm = " ".join(tipo.casefold().split())
             if tipo_norm not in existentes:
@@ -378,6 +390,7 @@ class ControladorAdminAlmacen:
             except ValueError as error:
                 errores.append({"fila": numero, "mensaje": str(error)})
                 continue
+            producto.imagen_url = imagen_url
             productos.append(producto)
 
         if errores:
