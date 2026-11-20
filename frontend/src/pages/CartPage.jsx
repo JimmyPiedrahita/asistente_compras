@@ -153,7 +153,7 @@ export default function CartPage({ onNavigate }) {
   if (cargando) {
     return (
       <Card>
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-stone-500">
           <Spinner /> Cargando carrito…
         </div>
       </Card>
@@ -168,26 +168,26 @@ export default function CartPage({ onNavigate }) {
             <span className="grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
               <Icon name="check" size={26} />
             </span>
-            <h1 className="mt-4 text-xl font-bold text-slate-900">Pago completado</h1>
-            <p className="mt-1 max-w-xl text-sm text-slate-600">
+            <h1 className="mt-4 text-xl font-bold text-stone-900">Pago completado</h1>
+            <p className="mt-1 max-w-xl text-sm text-stone-600">
               Tu compra quedó registrada y los datos de entrega fueron guardados.
             </p>
-            <div className="mt-4 grid w-full gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-4 text-left text-sm sm:grid-cols-2">
+            <div className="mt-4 grid w-full gap-2 rounded-lg border border-stone-200 bg-stone-50/60 p-4 text-left text-sm sm:grid-cols-2">
               <p>
-                <span className="text-slate-500">Identificador: </span>
-                <span className="font-mono text-xs text-slate-800">{compra.compra_id}</span>
+                <span className="text-stone-500">Identificador: </span>
+                <span className="font-mono text-xs text-stone-800">{compra.compra_id}</span>
               </p>
               <p>
-                <span className="text-slate-500">Fecha: </span>
-                <span className="text-slate-800">{fecha(compra.fecha)}</span>
+                <span className="text-stone-500">Fecha: </span>
+                <span className="text-stone-800">{fecha(compra.fecha)}</span>
               </p>
               <p>
-                <span className="text-slate-500">Total pagado: </span>
-                <span className="font-semibold text-slate-900">{dinero(compra.total)}</span>
+                <span className="text-stone-500">Total pagado: </span>
+                <span className="font-semibold text-stone-900">{dinero(compra.total)}</span>
               </p>
               <p>
-                <span className="text-slate-500">Almacenes: </span>
-                <span className="text-slate-800">{compra.por_almacen.length}</span>
+                <span className="text-stone-500">Almacenes: </span>
+                <span className="text-stone-800">{compra.por_almacen.length}</span>
               </p>
             </div>
           </div>
@@ -196,25 +196,25 @@ export default function CartPage({ onNavigate }) {
         <Card title="Resumen de la compra" description="Conservado con los datos de entrega confirmados.">
           <div className="space-y-3">
             {compra.por_almacen.map((parte) => (
-              <div key={parte.almacen_id} className="rounded-lg border border-slate-200 p-4">
+              <div key={parte.almacen_id} className="rounded-lg border border-stone-200 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-900">{parte.almacen_nombre}</p>
+                  <p className="text-sm font-semibold text-stone-900">{parte.almacen_nombre}</p>
                   <Badge tone="slate">Entrega independiente</Badge>
                 </div>
-                <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                <ul className="mt-2 space-y-1 text-sm text-stone-600">
                   {compra.items
                     .filter((item) => item.almacen_id === parte.almacen_id)
                     .map((item) => (
                       <li key={item.producto_id} className="flex justify-between gap-3">
                         <span>
                           {item.cantidad} × {item.nombre}{" "}
-                          <span className="text-xs text-slate-400">({item.presentacion})</span>
+                          <span className="text-xs text-stone-400">({item.presentacion})</span>
                         </span>
                         <span className="tabular-nums">{dinero(item.importe)}</span>
                       </li>
                     ))}
                 </ul>
-                <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                <div className="mt-2 border-t border-stone-100 pt-2 text-xs text-stone-500">
                   <p className="flex justify-between">
                     <span>Subtotal</span>
                     <span>{dinero(parte.subtotal)}</span>
@@ -227,7 +227,7 @@ export default function CartPage({ onNavigate }) {
                       <span>-{dinero(parte.descuento)}</span>
                     </p>
                   ) : null}
-                  <p className="mt-1 flex justify-between text-sm font-semibold text-slate-900">
+                  <p className="mt-1 flex justify-between text-sm font-semibold text-stone-900">
                     <span>Total del almacén</span>
                     <span>{dinero(parte.total)}</span>
                   </p>
@@ -235,12 +235,12 @@ export default function CartPage({ onNavigate }) {
               </div>
             ))}
           </div>
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 p-4 text-sm">
-            <p className="font-semibold text-slate-900">Datos de entrega confirmados</p>
-            <p className="mt-1 text-slate-600">
+          <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50/60 p-4 text-sm">
+            <p className="font-semibold text-stone-900">Datos de entrega confirmados</p>
+            <p className="mt-1 text-stone-600">
               {compra.datos_entrega.nombre} · {compra.datos_entrega.telefono}
             </p>
-            <p className="text-slate-600">
+            <p className="text-stone-600">
               {compra.datos_entrega.direccion}, {compra.datos_entrega.ciudad}
             </p>
           </div>
@@ -300,38 +300,38 @@ export default function CartPage({ onNavigate }) {
 
           <div className="space-y-4">
             {resumen.detalle_almacenes.map((parte) => (
-              <section key={parte.almacen_id} className="rounded-lg border border-slate-200">
-                <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <Icon name="warehouse" size={15} className="text-slate-500" />
+              <section key={parte.almacen_id} className="rounded-lg border border-stone-200">
+                <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 bg-stone-50/60 px-4 py-2.5">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-stone-900">
+                    <Icon name="warehouse" size={15} className="text-stone-500" />
                     {parte.almacen}
                   </p>
                   <Badge tone="slate">Entrega independiente</Badge>
                 </header>
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-stone-100">
                   {parte.items.map((item) => (
                     <li key={item.item_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-slate-900">{item.nombre}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">
+                        <p className="text-sm font-semibold text-stone-900">{item.nombre}</p>
+                        <p className="mt-0.5 text-xs text-stone-500">
                           {item.marca_variedad ? `${item.marca_variedad} · ` : ""}
                           {item.presentacion} · {dinero(item.precio_unitario)} c/u
                         </p>
                       </div>
-                      <div className="flex items-center rounded-lg border border-slate-200">
+                      <div className="flex items-center rounded-lg border border-stone-200">
                         <button
-                          className="px-2.5 py-1.5 text-slate-500 transition hover:bg-slate-50 disabled:opacity-40"
+                          className="px-2.5 py-1.5 text-stone-500 transition hover:bg-stone-50 disabled:opacity-40"
                           onClick={() => cambiarCantidad(item, item.cantidad - 1)}
                           disabled={item.cantidad <= 1 || ocupado === `item-${item.item_id}`}
                           aria-label="Disminuir cantidad"
                         >
                           −
                         </button>
-                        <span className="min-w-8 text-center text-sm font-semibold text-slate-900">
+                        <span className="min-w-8 text-center text-sm font-semibold text-stone-900">
                           {item.cantidad}
                         </span>
                         <button
-                          className="px-2.5 py-1.5 text-slate-500 transition hover:bg-slate-50 disabled:opacity-40"
+                          className="px-2.5 py-1.5 text-stone-500 transition hover:bg-stone-50 disabled:opacity-40"
                           onClick={() => cambiarCantidad(item, item.cantidad + 1)}
                           disabled={ocupado === `item-${item.item_id}`}
                           aria-label="Aumentar cantidad"
@@ -339,12 +339,12 @@ export default function CartPage({ onNavigate }) {
                           +
                         </button>
                       </div>
-                      <p className="w-24 text-right text-sm font-bold tabular-nums text-slate-900">
+                      <p className="w-24 text-right text-sm font-bold tabular-nums text-stone-900">
                         {dinero(item.importe)}
                       </p>
                       <button
                         onClick={() => quitarItem(item)}
-                        className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                        className="rounded-md p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600"
                         aria-label={`Quitar ${item.nombre}`}
                       >
                         <Icon name="trash" size={15} />
@@ -352,8 +352,8 @@ export default function CartPage({ onNavigate }) {
                     </li>
                   ))}
                 </ul>
-                <div className="border-t border-slate-100 px-4 py-2.5 text-sm">
-                  <p className="flex justify-between text-slate-600">
+                <div className="border-t border-stone-100 px-4 py-2.5 text-sm">
+                  <p className="flex justify-between text-stone-600">
                     <span>Subtotal del almacén</span>
                     <span className="tabular-nums">{dinero(parte.subtotal)}</span>
                   </p>
@@ -365,7 +365,7 @@ export default function CartPage({ onNavigate }) {
                         </span>
                         <span className="tabular-nums">-{dinero(parte.descuento)}</span>
                       </p>
-                      <p className="mt-1 flex justify-between font-semibold text-slate-900">
+                      <p className="mt-1 flex justify-between font-semibold text-stone-900">
                         <span>Total del almacén</span>
                         <span className="tabular-nums">{dinero(parte.total)}</span>
                       </p>
@@ -397,16 +397,16 @@ export default function CartPage({ onNavigate }) {
 
           <div className="mt-4">
             {resumen.cupones_aplicados.length ? (
-              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+              <ul className="divide-y divide-stone-100 rounded-lg border border-stone-200">
                 {resumen.cupones_aplicados.map((cupon) => (
                   <li key={cupon.codigo} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                     <Badge tone="emerald">{cupon.codigo}</Badge>
-                    <span className="min-w-0 flex-1 text-xs text-slate-500">
+                    <span className="min-w-0 flex-1 text-xs text-stone-500">
                       {cupon.almacen} · {cupon.porcentaje} % de descuento
                     </span>
                     <button
                       onClick={() => quitarCupon(cupon)}
-                      className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                      className="rounded-md p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600"
                       aria-label={`Quitar cupón ${cupon.codigo}`}
                     >
                       <Icon name="x" size={14} />
@@ -415,7 +415,7 @@ export default function CartPage({ onNavigate }) {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-stone-500">
                 No hay cupones aplicados. Ingresa el código que te haya dado un almacén.
               </p>
             )}
@@ -427,23 +427,23 @@ export default function CartPage({ onNavigate }) {
         <Card title="Resumen de compra">
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <dt className="text-slate-600">Subtotal general</dt>
-              <dd className="font-medium tabular-nums text-slate-900">{dinero(resumen.subtotal)}</dd>
+              <dt className="text-stone-600">Subtotal general</dt>
+              <dd className="font-medium tabular-nums text-stone-900">{dinero(resumen.subtotal)}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-slate-600">Descuento total</dt>
+              <dt className="text-stone-600">Descuento total</dt>
               <dd className="font-medium tabular-nums text-emerald-700">
                 -{dinero(resumen.descuento_total)}
               </dd>
             </div>
-            <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-bold">
+            <div className="flex justify-between border-t border-stone-200 pt-2 text-base font-bold">
               <dt>Total final</dt>
-              <dd className="tabular-nums text-slate-900">{dinero(resumen.total)}</dd>
+              <dd className="tabular-nums text-stone-900">{dinero(resumen.total)}</dd>
             </div>
           </dl>
 
-          <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mt-4 space-y-3 border-t border-stone-100 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
               Datos de entrega
             </p>
             <Field label="Nombre">
@@ -482,7 +482,7 @@ export default function CartPage({ onNavigate }) {
                 autoComplete="address-level2"
               />
             </Field>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-stone-500">
               Puedes corregir estos datos antes de confirmar. Se guardarán con la compra.
             </p>
           </div>

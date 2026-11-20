@@ -5,7 +5,7 @@ const styles = {
   success: {
     icon: "check",
     iconClass: "text-emerald-600",
-    border: "border-slate-200",
+    border: "border-emerald-200",
   },
   error: {
     icon: "alert",
@@ -14,8 +14,8 @@ const styles = {
   },
   info: {
     icon: "sparkles",
-    iconClass: "text-slate-500",
-    border: "border-slate-200",
+    iconClass: "text-sky-500",
+    border: "border-sky-200",
   },
 };
 
@@ -29,21 +29,21 @@ export default function Toasts() {
         return (
           <div
             key={toast.id}
-            className={`animate-toast pointer-events-auto flex items-start gap-3 rounded-lg border bg-white p-3.5 ${style.border}`}
+            className={`animate-toast pointer-events-auto flex items-start gap-3 rounded-xl border bg-white p-3.5 shadow-sm ${style.border}`}
             role="status"
           >
-            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100">
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-stone-100">
               <Icon name={style.icon} size={15} className={style.iconClass} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="text-xs font-semibold text-stone-600">
                 {toast.title}
               </p>
-              <p className="mt-0.5 break-words text-sm text-slate-700">{toast.message}</p>
+              <p className="mt-0.5 break-words text-sm text-stone-700">{toast.message}</p>
             </div>
             <button
               onClick={() => dismissToast(toast.id)}
-              className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              className="rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-600"
               aria-label="Cerrar aviso"
             >
               <Icon name="x" size={14} />

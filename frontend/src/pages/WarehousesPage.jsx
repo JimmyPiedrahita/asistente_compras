@@ -77,7 +77,7 @@ export default function WarehousesPage() {
             Crear almacén
           </Button>
         </form>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+        <p className="mt-3 text-xs leading-relaxed text-stone-500">
           El nombre debe ser único. No se incluyen funciones para editar o eliminar almacenes.
         </p>
       </Card>
@@ -87,7 +87,7 @@ export default function WarehousesPage() {
         description="Cada administrador de almacén se vincula a un único almacén."
       >
         {cargando ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-stone-500">
             <Spinner /> Cargando almacenes…
           </div>
         ) : almacenes.length === 0 ? (
@@ -97,15 +97,15 @@ export default function WarehousesPage() {
             description="Crea el primer almacén para poder asignarle un administrador y comenzar a registrar productos."
           />
         ) : (
-          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          <ul className="divide-y divide-stone-100 rounded-lg border border-stone-200">
             {almacenes.map((almacen) => (
               <li key={almacen.almacen_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-stone-100 text-stone-500">
                   <Icon name="warehouse" size={17} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900">{almacen.nombre}</p>
-                  <p className="text-xs text-slate-500">Creado el {fecha(almacen.creado_en)}</p>
+                  <p className="text-sm font-semibold text-stone-900">{almacen.nombre}</p>
+                  <p className="text-xs text-stone-500">Creado el {fecha(almacen.creado_en)}</p>
                 </div>
                 <Badge tone="slate">
                   {almacen.productos} {almacen.productos === 1 ? "producto" : "productos"}

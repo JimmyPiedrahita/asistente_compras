@@ -43,12 +43,12 @@ function AlmacenSelect({ value, almacenes, onChange }) {
         aria-haspopup="listbox"
         aria-expanded={abierto}
         onClick={() => setAbierto((actual) => !actual)}
-        className="flex w-full min-w-0 items-center justify-between rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-left text-sm text-slate-900 transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/5"
+        className="flex w-full min-w-0 items-center justify-between rounded-lg border border-stone-200 bg-white px-3.5 py-2.5 text-left text-sm text-stone-900 transition focus:border-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/5"
       >
-        <span className={`min-w-0 truncate ${seleccionado ? "" : "text-slate-400"}`}>
+        <span className={`min-w-0 truncate ${seleccionado ? "" : "text-stone-400"}`}>
           {seleccionado?.nombre || "Selecciona un almacén"}
         </span>
-        <span className="ml-2 shrink-0 text-slate-400" aria-hidden="true">
+        <span className="ml-2 shrink-0 text-stone-400" aria-hidden="true">
           ▾
         </span>
       </button>
@@ -56,7 +56,7 @@ function AlmacenSelect({ value, almacenes, onChange }) {
         <div
           role="listbox"
           aria-labelledby="admin-almacen"
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-stone-200 bg-white p-1 shadow-lg"
         >
           {almacenes.map((almacen) => (
             <button
@@ -68,10 +68,10 @@ function AlmacenSelect({ value, almacenes, onChange }) {
                 onChange(almacen.almacen_id);
                 setAbierto(false);
               }}
-              className={`block w-full rounded-md px-3 py-2 text-left text-sm transition hover:bg-slate-50 ${
+              className={`block w-full rounded-md px-3 py-2 text-left text-sm transition hover:bg-stone-50 ${
                 value === almacen.almacen_id
-                  ? "bg-slate-100 font-semibold text-slate-900"
-                  : "text-slate-700"
+                  ? "bg-stone-100 font-semibold text-stone-900"
+                  : "text-stone-700"
               }`}
             >
               {almacen.nombre}
@@ -128,7 +128,7 @@ function Credenciales({ admin, onGuardado }) {
   return (
     <form
       onSubmit={guardar}
-      className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50/60 p-3"
+      className="mt-2 w-full rounded-lg border border-stone-200 bg-stone-50/60 p-3"
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Correo electrónico" htmlFor={`admin-email-${admin.usuario_id}`}>
@@ -240,7 +240,7 @@ export default function AdminsPage() {
   if (cargando) {
     return (
       <Card>
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-stone-500">
           <Spinner /> Cargando administradores…
         </div>
       </Card>
@@ -302,7 +302,7 @@ export default function AdminsPage() {
             </Button>
           </form>
         )}
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+        <p className="mt-3 text-xs leading-relaxed text-stone-500">
           El correo no puede repetirse entre cuentas. No se incluyen funciones para eliminar
           administradores ni para crear otros administradores de la aplicación.
         </p>
@@ -320,11 +320,11 @@ export default function AdminsPage() {
             description="Crea un almacén y luego asígnale un administrador para que pueda gestionar su catálogo."
           />
         ) : (
-          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          <ul className="divide-y divide-stone-100 rounded-lg border border-stone-200">
             {admins.map((admin) => (
               <li key={admin.usuario_id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-stone-100 text-stone-500">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="17"
@@ -342,8 +342,8 @@ export default function AdminsPage() {
                     </svg>
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-900">{admin.nombre}</p>
-                    <p className="truncate text-xs text-slate-500">{admin.email}</p>
+                    <p className="text-sm font-semibold text-stone-900">{admin.nombre}</p>
+                    <p className="truncate text-xs text-stone-500">{admin.email}</p>
                   </div>
                   <Badge tone={admin.activo ? "emerald" : "rose"}>
                     {admin.activo ? "Activo" : "Inactivo"}

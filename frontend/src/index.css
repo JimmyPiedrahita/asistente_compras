@@ -10,17 +10,18 @@ html {
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-stone-50 text-stone-900 antialiased;
+  line-height: 1.6;
 }
 
 ::selection {
-  @apply bg-slate-200 text-slate-900;
+  @apply bg-sky-200 text-sky-900;
 }
 
 /* Scrollbar sutil para paneles de resultados */
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgb(203 213 225) transparent;
+  scrollbar-color: rgb(214 211 208) transparent;
 }
 
 .scroll-thin::-webkit-scrollbar {
@@ -29,7 +30,7 @@ body {
 }
 
 .scroll-thin::-webkit-scrollbar-thumb {
-  background-color: rgb(203 213 225);
+  background-color: rgb(214 211 208);
   border-radius: 9999px;
 }
 

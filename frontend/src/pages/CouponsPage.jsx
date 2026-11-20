@@ -138,7 +138,7 @@ export default function CouponsPage() {
         description="Los cupones eliminados no afectan compras ya completadas."
       >
         {cargando ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-stone-500">
             <Spinner /> Cargando cupones…
           </div>
         ) : cupones.length === 0 ? (
@@ -148,14 +148,14 @@ export default function CouponsPage() {
             description="Crea un cupón para ofrecer un descuento sobre los productos de tu almacén."
           />
         ) : (
-          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          <ul className="divide-y divide-stone-100 rounded-lg border border-stone-200">
             {cupones.map((cupon) => (
               <li key={cupon.cupon_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <Badge tone="emerald">{cupon.codigo}</Badge>
-                <span className="text-sm font-semibold text-slate-900">
+                <span className="text-sm font-semibold text-stone-900">
                   {cupon.porcentaje} % de descuento
                 </span>
-                <span className="ml-auto text-xs text-slate-400">
+                <span className="ml-auto text-xs text-stone-400">
                   Creado el {fecha(cupon.creado_en)}
                 </span>
                 <Button

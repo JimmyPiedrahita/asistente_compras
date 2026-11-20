@@ -235,7 +235,7 @@ export default function ProductsPage() {
           description="Los cambios no alteran las compras ya registradas."
         >
           {cargando ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-stone-500">
               <Spinner /> Cargando productos…
             </div>
           ) : productos.length === 0 ? (
@@ -248,7 +248,7 @@ export default function ProductsPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                  <tr className="border-b border-stone-200 text-[11px] uppercase tracking-wider text-stone-400">
                     <th className="pb-2 pr-3 font-semibold">Producto</th>
                     <th className="pb-2 pr-3 font-semibold">Tipo</th>
                     <th className="pb-2 pr-3 font-semibold">Presentación</th>
@@ -256,20 +256,20 @@ export default function ProductsPage() {
                     <th className="pb-2 text-right font-semibold">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-stone-100">
                   {productos.map((producto) => (
                     <tr key={producto.producto_id} className="align-middle">
                       <td className="py-2.5 pr-3">
-                        <p className="font-medium text-slate-900">{producto.nombre}</p>
+                        <p className="font-medium text-stone-900">{producto.nombre}</p>
                         {producto.marca_variedad ? (
-                          <p className="text-xs text-slate-500">{producto.marca_variedad}</p>
+                          <p className="text-xs text-stone-500">{producto.marca_variedad}</p>
                         ) : null}
                       </td>
                       <td className="py-2.5 pr-3">
                         <Badge tone="slate">{producto.tipo_producto}</Badge>
                       </td>
-                      <td className="py-2.5 pr-3 text-slate-600">{producto.presentacion}</td>
-                      <td className="py-2.5 pr-3 text-right font-semibold tabular-nums text-slate-900">
+                      <td className="py-2.5 pr-3 text-stone-600">{producto.presentacion}</td>
+                      <td className="py-2.5 pr-3 text-right font-semibold tabular-nums text-stone-900">
                         <Money value={producto.precio} />
                       </td>
                       <td className="py-2.5 text-right">
@@ -308,26 +308,26 @@ export default function ProductsPage() {
       >
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
               Encabezados requeridos
             </p>
-            <code className="mt-2 block break-all whitespace-normal rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
+            <code className="mt-2 block break-all whitespace-normal rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs text-stone-700">
               {CABECERAS}
             </code>
-            <ul className="mt-3 break-words space-y-1 text-xs leading-relaxed text-slate-500">
+            <ul className="mt-3 break-words space-y-1 text-xs leading-relaxed text-stone-500">
               <li>· Archivo UTF-8 separado por comas, con encabezados en la primera fila.</li>
-              <li>· <span className="font-medium text-slate-700">tipo_producto</span>, <span className="font-medium text-slate-700">nombre</span>, <span className="font-medium text-slate-700">precio</span> y <span className="font-medium text-slate-700">presentacion</span> son obligatorios.</li>
-              <li>· <span className="font-medium text-slate-700">marca_variedad</span> es opcional.</li>
+              <li>· <span className="font-medium text-stone-700">tipo_producto</span>, <span className="font-medium text-stone-700">nombre</span>, <span className="font-medium text-stone-700">precio</span> y <span className="font-medium text-stone-700">presentacion</span> son obligatorios.</li>
+              <li>· <span className="font-medium text-stone-700">marca_variedad</span> es opcional.</li>
               <li>· Precios sin símbolos de moneda ni separadores de miles; decimales con punto.</li>
               <li>· No incluyas una columna de almacén: se asigna automáticamente.</li>
             </ul>
           </div>
-          <div className="min-w-0 flex flex-col justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/40 p-5 text-center">
-            <span className="mx-auto grid h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500">
+          <div className="min-w-0 flex flex-col justify-center rounded-lg border border-dashed border-stone-200 bg-stone-50/40 p-5 text-center">
+            <span className="mx-auto grid h-11 w-11 place-items-center rounded-lg border border-stone-200 bg-white text-stone-500">
               <Icon name="file" size={20} />
             </span>
-            <p className="mt-3 text-sm font-medium text-slate-700">Selecciona un archivo .csv</p>
-            <p className="mt-1 break-words text-xs text-slate-500">
+            <p className="mt-3 text-sm font-medium text-stone-700">Selecciona un archivo .csv</p>
+            <p className="mt-1 break-words text-xs text-stone-500">
               Solo se agregarán productos; no se actualizan ni eliminan los existentes.
             </p>
             <input
@@ -368,7 +368,7 @@ export default function ProductsPage() {
                 {erroresCsv.map((error, indice) => (
                   <tr key={`${error.fila}-${indice}`}>
                     <td className="px-3 py-2 align-top font-mono text-rose-700">{error.fila}</td>
-                    <td className="break-words px-3 py-2 text-slate-700">{error.mensaje}</td>
+                    <td className="break-words px-3 py-2 text-stone-700">{error.mensaje}</td>
                   </tr>
                 ))}
               </tbody>

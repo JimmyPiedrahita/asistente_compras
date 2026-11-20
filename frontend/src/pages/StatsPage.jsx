@@ -14,21 +14,21 @@ function Listado({ titulo, descripcion, filas, tone }) {
   if (!filas.length) {
     return (
       <Card title={titulo} description={descripcion}>
-        <p className="py-6 text-center text-sm text-slate-500">Sin productos para calcular.</p>
+        <p className="py-6 text-center text-sm text-stone-500">Sin productos para calcular.</p>
       </Card>
     );
   }
   return (
     <Card title={titulo} description={descripcion}>
-      <ol className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+      <ol className="divide-y divide-stone-100 rounded-lg border border-stone-200">
         {filas.map((fila, indice) => (
           <li key={fila.producto_id} className="flex items-center gap-3 px-4 py-2.5">
-            <span className="w-6 text-xs font-semibold tabular-nums text-slate-400">
+            <span className="w-6 text-xs font-semibold tabular-nums text-stone-400">
               {indice + 1}.
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-900">{fila.nombre}</p>
-              <p className="truncate text-xs text-slate-500">
+              <p className="truncate text-sm font-medium text-stone-900">{fila.nombre}</p>
+              <p className="truncate text-xs text-stone-500">
                 {fila.marca_variedad ? `${fila.marca_variedad} · ` : ""}
                 {fila.presentacion}
               </p>
@@ -68,7 +68,7 @@ export default function StatsPage() {
   if (cargando) {
     return (
       <Card>
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-stone-500">
           <Spinner /> Calculando estadísticas…
         </div>
       </Card>
@@ -104,7 +104,7 @@ export default function StatsPage() {
             vendidas.
           </Alert>
         ) : (
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-stone-600">
             Los listados incluyen todos los productos actuales; los empates se ordenan
             alfabéticamente por nombre.
           </p>
