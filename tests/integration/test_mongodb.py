@@ -1,216 +1,330 @@
-"""Pruebas de integración con MongoDB real.
+"""Pruebas de integración de los repositorios MongoDB.
 
-Se omiten si no existe ``MONGODB_URI``. En CI se levanta un replica set de un
-nodo para poder probar Change Streams.
+Se ejecutan solo cuando ``MONGODB_URI`` está definida. Cada prueba crea una base
+global temporal y, mediante el servicio de aprovisionamiento, una o más bases
+de almacén que se eliminan al terminar.
+
+La consistencia entre la base global y las bases de almacén es eventual. Como
+el listener no corre en estas pruebas, la reconciliación se ejecuta de forma
+explícita.
 """
 
 from __future__ import annotations
 
 import os
-import threading
-import time
 import unittest
 import uuid
-from datetime import datetime, timedelta, timezone
+
+from pymongo import MongoClient
 
 from core.config import Settings
-from core.errors import NoEncontrado
-from infrastructure.mongodb import (
-    MongoInventarioRepository,
-    SincronizadorComparador,
-)
-from infrastructure.mongodb.documentos import documento_comparador
+from core.errors import Conflicto, NoEncontrado
+from infrastructure.mongodb.contexto import construir_contexto
+from models.permisos import ADMINISTRADOR_APP
 from models.productos import Producto
+from models.seguridad import verificar_password
 
 MONGODB_URI = os.getenv("MONGODB_URI")
 
+ADMIN_EMAIL = "repo-admin@example.com"
+ADMIN_PASSWORD = "RepoAdmin123"
+
 
 @unittest.skipUnless(MONGODB_URI, "MONGODB_URI no configurada")
-class PruebasMongo(unittest.TestCase):
+class PruebasRepositoriosMongo(unittest.TestCase):
     def setUp(self) -> None:
-        self.prefijo = f"test_{uuid.uuid4().hex[:10]}"
+        self.base_datos = f"test_repo_{uuid.uuid4().hex[:10]}"
+        self._mongo = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
+        self._mongo.drop_database(self.base_datos)
         self.settings = Settings.de_pruebas(
             mongodb_uri=MONGODB_URI or "",
-            mongodb_db_prefix=self.prefijo,
-            mongodb_comparador_db=f"{self.prefijo}_comparador",
+            mongodb_db=self.base_datos,
+            admin_email=ADMIN_EMAIL,
+            admin_password=ADMIN_PASSWORD,
         )
-        self.repo = MongoInventarioRepository(
-            self.settings.mongodb_uri,
-            self.settings.almacenes,
-            comparador_db=self.settings.mongodb_comparador_db,
-            timeout_ms=3000,
-        )
+        self.ctx = construir_contexto(self.settings)
 
     def tearDown(self) -> None:
         try:
-            for almacen in self.settings.almacenes:
-                self.repo.client.drop_database(almacen.base_datos)
-            self.repo.client.drop_database(self.settings.mongodb_comparador_db)
+            for almacen in self.ctx.repo_almacenes.listar():
+                if almacen.db_name:
+                    self._mongo.drop_database(almacen.db_name)
+            self._mongo.drop_database(self.base_datos)
         finally:
-            self.repo.close()
+            self._mongo.close()
+            self.ctx.cerrar()
 
-    @staticmethod
-    def _esperar(condicion, segundos: float = 15.0) -> None:
-        limite = time.monotonic() + segundos
-        while time.monotonic() < limite:
-            if condicion():
-                return
-            time.sleep(0.1)
-        raise AssertionError("La condición no se cumplió dentro del tiempo esperado")
+    # Utilidades -------------------------------------------------------
+    def _crear_almacen(self, nombre: str):
+        return self.ctx.aprovisionamiento.crear_almacen(nombre)
 
-    def test_aislamiento_entre_almacenes(self) -> None:
-        producto = Producto("Leche", 100, "Ilolay")
-        self.repo.insertar(1, producto)
-
-        almacen_1 = self.repo.cargar_almacen(1)
-        almacen_2 = self.repo.cargar_almacen(2)
-        self.assertEqual(len(almacen_1), 1)
-        self.assertEqual(len(almacen_2), 0)
-        self.assertEqual(almacen_1[0].producto_id, producto.producto_id)
-        self.assertEqual(self.repo.contar(1), 1)
-        self.assertEqual(self.repo.contar(2), 0)
-
-    def test_actualizar_y_ping(self) -> None:
-        producto = Producto("Pan", 50, "Bimbo")
-        self.repo.insertar(1, producto)
-        cargado = self.repo.cargar_almacen(1)[0]
-        cargado.precio = 75
-        self.repo.actualizar(1, cargado)
-
-        actualizado = self.repo.cargar_almacen(1)[0]
-        self.assertEqual(actualizado.precio, 75)
-        self.repo.ping()
-
-    def test_upsert_idempotente(self) -> None:
-        producto = Producto("Café", 10, "Marca")
-        self.assertEqual(self.repo.upsert_por_nombre_marca(1, producto), "insertado")
-        producto.precio = 20
-        self.assertEqual(self.repo.upsert_por_nombre_marca(1, producto), "actualizado")
-        self.assertEqual(self.repo.contar(1), 1)
-        self.assertEqual(self.repo.cargar_almacen(1)[0].precio, 20)
-
-    def test_indices(self) -> None:
-        coleccion = self.repo.client[self.settings.almacenes[0].base_datos]["productos"]
-        indices = coleccion.index_information()
-        campos = [info["key"] for info in indices.values()]
-        self.assertIn([("nombre_normalizado", 1)], campos)
-        self.assertIn([("nombre_normalizado", 1), ("marca_normalizada", 1)], campos)
-
-    def test_indices_comparador(self) -> None:
-        coleccion = self.repo.client[self.settings.mongodb_comparador_db]["productos"]
-        indices = coleccion.index_information()
-        campos = [info["key"] for info in indices.values()]
-        self.assertIn([("nombre_normalizado", 1), ("precio_final", 1)], campos)
-        self.assertIn(
-            [("almacen_id", 1), ("nombre_normalizado", 1), ("precio_final", 1)],
-            campos,
+    def _crear_producto(
+        self,
+        almacen_id: str,
+        *,
+        tipo: str = "arroz",
+        nombre: str = "Arroz Diana",
+        precio: float = 3000,
+        presentacion: str = "500 g",
+        marca: str = "Diana",
+    ) -> Producto:
+        return Producto.crear(
+            producto_id=uuid.uuid4().hex,
+            almacen_id=almacen_id,
+            tipo_producto=tipo,
+            nombre=nombre,
+            precio=precio,
+            presentacion=presentacion,
+            marca_variedad=marca,
         )
 
-    def test_listado_paginado_y_eliminar(self) -> None:
-        for nombre in ("Arroz", "Cafe", "Aceite"):
-            self.repo.insertar(1, Producto(nombre, 100))
+    # Pruebas ----------------------------------------------------------
+    def test_cuenta_inicial_idempotente(self) -> None:
+        usuario = self.ctx.repo_usuarios.buscar_usuario_por_email(ADMIN_EMAIL)
+        self.assertIsNotNone(usuario)
+        self.assertEqual(usuario.rol, ADMINISTRADOR_APP)  # type: ignore[union-attr]
+        self.assertTrue(
+            verificar_password(ADMIN_PASSWORD, usuario.password_hash)  # type: ignore[union-attr]
+        )
 
-        productos, total = self.repo.listar_productos(1, limit=1, offset=1)
-        self.assertEqual(total, 3)
-        self.assertEqual(len(productos), 1)
+        self.ctx.repo_usuarios.asegurar_admin(
+            admin_email=ADMIN_EMAIL,
+            admin_password=ADMIN_PASSWORD,
+            admin_nombre="Administrador de pruebas",
+        )
+        self.assertEqual(
+            self._mongo[self.base_datos]["usuarios"].count_documents({"rol": ADMINISTRADOR_APP}),
+            1,
+        )
 
-        self.repo.eliminar(1, productos[0].producto_id)
-        self.assertEqual(self.repo.contar(1), 2)
+    def test_aprovisionamiento_y_aislamiento_entre_almacenes(self) -> None:
+        a = self._crear_almacen("  Almacén   Central ")
+        self.assertEqual(a.nombre, "Almacén Central")
+        self.assertEqual(a.estado, "activo")
+        self.assertTrue(a.db_name.startswith("almacen_"))
+        self.assertTrue(a.mongo_user.endswith("_app"))
+
+        b = self._crear_almacen("Almacén Norte")
+        self.assertNotEqual(a.db_name, b.db_name)
+        self.assertNotEqual(a.mongo_user, b.mongo_user)
+
+        with self.assertRaises(Conflicto):
+            self._crear_almacen("almacén central")
+
+        repo_a = self.ctx.directorio.repositorio(a.almacen_id)
+        repo_b = self.ctx.directorio.repositorio(b.almacen_id)
+        producto = self._crear_producto(a.almacen_id)
+        repo_a.insertar_producto(producto)
+
+        self.assertIsNotNone(repo_a.obtener_producto(producto.producto_id))
+        self.assertIsNone(repo_b.obtener_producto(producto.producto_id))
+        self.assertEqual(repo_a.listar_productos()[1], 1)
+        self.assertEqual(repo_b.listar_productos()[1], 0)
+        self.assertEqual(self.ctx.repo_almacenes.contar_productos(), 0)
+
+        # El repositorio de un almacén nunca opera sobre otro.
         with self.assertRaises(NoEncontrado):
-            self.repo.eliminar(1, productos[0].producto_id)
+            repo_b.eliminar_producto(producto.producto_id)
+        self.assertIsNotNone(repo_a.obtener_producto(producto.producto_id))
 
-    def test_comparador_reconstruccion_y_busquedas(self) -> None:
-        self.repo.insertar(1, Producto("Arroz", 1000, "Gallo"))
-        self.repo.insertar(2, Producto("Arroz", 900, "Marolio"))
-        self.repo.insertar(3, Producto("Cafe", 500, "Nestle"))
+        repo_a.eliminar_producto(producto.producto_id)
+        self.assertIsNone(repo_a.obtener_producto(producto.producto_id))
 
-        resultado = self.repo.reconciliar_comparador()
-        self.assertEqual(resultado["documentos"], 3)
+    def test_presentacion_global_y_replicacion_de_catalogo(self) -> None:
+        almacen = self._crear_almacen("Almacén Central")
+        repo = self.ctx.directorio.repositorio(almacen.almacen_id)
+        producto = self._crear_producto(almacen.almacen_id)
+        repo.insertar_producto(producto)
 
-        globales = self.repo.buscar_global(["Arroz"])
-        self.assertEqual(len(globales), 1)
-        self.assertEqual(globales[0]["almacen"].id_almacen, 2)
-        self.assertEqual(globales[0]["precio"], 900)
+        self.assertEqual(repo.presentaciones_del_tipo("arroz"), {"500 g"})
 
-        por_almacen = self.repo.buscar_mejor_precio(["Arroz"])
-        self.assertEqual(len(por_almacen), 2)
+        # Sin listener, la réplica global se reconstruye explícitamente.
+        self.ctx.sincronizador.reconciliar_almacen(almacen)
+        replicado = self.ctx.repo_catalogo.obtener_producto(producto.producto_id)
+        self.assertIsNotNone(replicado)
+        self.assertEqual(replicado.almacen_id, almacen.almacen_id)  # type: ignore[union-attr]
+        self.assertEqual(self.ctx.repo_almacenes.contar_productos(almacen.almacen_id), 1)
 
-        catalogo = self.repo.buscar_catalogo(["Arroz"], limit=1, offset=0)
-        self.assertEqual(sum(len(lista) for lista in catalogo.values()), 1)
-
-        estado = self.repo.estado_comparador()
-        self.assertEqual(estado["documentos"], 3)
-
-    def _coleccion_comparador(self):
-        return self.repo.client[self.settings.mongodb_comparador_db]["productos"]
-
-    def test_reconciliacion_elimina_documentos_obsoletos(self) -> None:
-        self.repo.insertar(1, Producto("Arroz", 1000, "Gallo"))
-        self.repo.reconciliar_comparador()
-
-        fantasma = documento_comparador(
-            1,
-            "Almacen 1",
-            Producto("Fantasma", 50),
-            sincronizado_en=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        valido = self._crear_producto(almacen.almacen_id, nombre="Arroz Roa")
+        self.ctx.validador.validar_presentacion(
+            valido, locales=repo.presentaciones_del_tipo("arroz")
         )
-        coleccion = self._coleccion_comparador()
-        coleccion.replace_one({"_id": fantasma["_id"]}, fantasma, upsert=True)
 
-        resultado = self.repo.reconciliar_comparador()
-        self.assertEqual(resultado["documentos"], 1)
-        self.assertIsNone(coleccion.find_one({"_id": fantasma["_id"]}))
-
-    def test_reconciliacion_conserva_eventos_posteriores(self) -> None:
-        self.repo.insertar(1, Producto("Arroz", 1000, "Gallo"))
-        reciente = documento_comparador(
-            1,
-            "Almacen 1",
-            Producto("Evento reciente", 10),
-            sincronizado_en=datetime.now(timezone.utc) + timedelta(minutes=1),
+        invalido = self._crear_producto(
+            almacen.almacen_id, nombre="Arroz Grande", presentacion="1 kg"
         )
-        coleccion = self._coleccion_comparador()
-        coleccion.replace_one({"_id": reciente["_id"]}, reciente, upsert=True)
-
-        # Simula un evento aplicado por otro proceso durante la reconciliación:
-        # no lleva la marca de esta ejecución pero es posterior a su inicio.
-        self.repo.reconciliar_comparador()
-        self.assertIsNotNone(coleccion.find_one({"_id": reciente["_id"]}))
-
-    def test_change_streams_propagan_cambios(self) -> None:
-        sincronizador = SincronizadorComparador(
-            self.settings.mongodb_uri,
-            self.settings.almacenes,
-            comparador_db=self.settings.mongodb_comparador_db,
-            timeout_ms=3000,
-        )
-        try:
-            sincronizador.verificar_replica_set()
-        except RuntimeError:
-            sincronizador.close()
-            self.skipTest("MongoDB no está configurado como replica set")
-
-        hilo = threading.Thread(target=sincronizador.ejecutar, daemon=True)
-        hilo.start()
-        try:
-            self._esperar(
-                lambda: sincronizador.estado().get("estado") in {"sincronizado", "escuchando"}
+        with self.assertRaises(Conflicto):
+            self.ctx.validador.validar_presentacion(
+                invalido, locales=repo.presentaciones_del_tipo("arroz")
             )
 
-            producto = Producto("Leche", 100, "Ilolay")
-            self.repo.insertar(1, producto)
-            self._esperar(lambda: bool(self.repo.buscar_global(["Leche"])))
+        # Cada colección mantiene su propio token de Change Stream.
+        self.ctx.repo_replica.guardar_token(
+            almacen.almacen_id, "productos", {"_data": "token-productos"}
+        )
+        self.ctx.repo_replica.guardar_token(
+            almacen.almacen_id, "cupones", {"_data": "token-cupones"}
+        )
+        self.assertEqual(
+            set(self.ctx.repo_replica.leer_tokens(almacen.almacen_id)),
+            {"productos", "cupones"},
+        )
+        self.ctx.repo_replica.reiniciar_tokens(almacen.almacen_id)
+        self.assertEqual(self.ctx.repo_replica.leer_tokens(almacen.almacen_id), {})
 
-            producto.precio = 80
-            self.repo.actualizar(1, producto)
-            self._esperar(lambda: self.repo.buscar_global(["Leche"])[0]["precio"] == 80)
+        # Al eliminar el producto, la reconciliación limpia la réplica global.
+        repo.eliminar_producto(producto.producto_id)
+        self.ctx.sincronizador.reconciliar_almacen(almacen)
+        self.assertIsNone(self.ctx.repo_catalogo.obtener_producto(producto.producto_id))
 
-            self.repo.eliminar(1, producto.producto_id)
-            self._esperar(lambda: not self.repo.buscar_global(["Leche"]))
-        finally:
-            sincronizador.detener()
-            hilo.join(timeout=10)
-            sincronizador.close()
+    def test_cupones_unicos_y_replicados_a_la_base_global(self) -> None:
+        a = self._crear_almacen("Almacén A")
+        b = self._crear_almacen("Almacén B")
+        repo_a = self.ctx.directorio.repositorio(a.almacen_id)
+        repo_b = self.ctx.directorio.repositorio(b.almacen_id)
+
+        cupon = repo_a.crear_cupon(codigo="arroz10", porcentaje=10)
+        self.assertEqual(cupon.codigo, "ARROZ10")
+        self.assertEqual(cupon.porcentaje, 10)
+
+        with self.assertRaises(Conflicto):
+            repo_a.crear_cupon(codigo="ARROZ10", porcentaje=20)
+        with self.assertRaises(Conflicto):
+            repo_a.crear_cupon(codigo="OTRO", porcentaje=0)
+
+        self.ctx.sincronizador.reconciliar_almacen(a)
+        global_ = self.ctx.repo_catalogo.obtener_cupon_por_codigo(" arroz10 ")
+        self.assertIsNotNone(global_)
+        self.assertEqual(global_.almacen_id, a.almacen_id)  # type: ignore[union-attr]
+
+        # La unicidad global se valida con la conexión de solo lectura.
+        with self.assertRaises(Conflicto):
+            self.ctx.validador.validar_cupon_unico("arroz10")
+
+        self.assertEqual(len(repo_a.listar_cupones()), 1)
+        self.assertEqual(repo_b.listar_cupones(), [])
+        self.assertIsNotNone(repo_a.obtener_cupon_por_codigo(" arroz10 "))
+        self.assertIsNone(repo_b.obtener_cupon_por_codigo("ARROZ10"))
+
+        with self.assertRaises(NoEncontrado):
+            repo_b.eliminar_cupon(cupon.cupon_id)
+        repo_a.eliminar_cupon(cupon.cupon_id)
+        self.ctx.sincronizador.reconciliar_almacen(a)
+
+        self.assertIsNone(self.ctx.repo_catalogo.obtener_cupon_por_codigo("ARROZ10"))
+        self.ctx.validador.validar_cupon_unico("ARROZ10")
+
+    def test_compra_idempotente_proyeccion_y_estadisticas(self) -> None:
+        a = self._crear_almacen("Almacén A")
+        b = self._crear_almacen("Almacén B")
+        repo_a = self.ctx.directorio.repositorio(a.almacen_id)
+        repo_b = self.ctx.directorio.repositorio(b.almacen_id)
+
+        p1 = self._crear_producto(a.almacen_id)
+        p2 = self._crear_producto(
+            b.almacen_id,
+            tipo="leche",
+            nombre="Leche Entera",
+            precio=4500,
+            presentacion="1 litro",
+            marca="Alpina",
+        )
+        repo_a.insertar_producto(p1)
+        repo_b.insertar_producto(p2)
+
+        documento = {
+            "_id": uuid.uuid4().hex,
+            "cliente_nombre": "Ana",
+            "datos_entrega": {
+                "nombre": "Ana",
+                "telefono": "3001234567",
+                "direccion": "Calle 1",
+                "ciudad": "Bogotá",
+            },
+            "items": [
+                {
+                    "almacen_id": a.almacen_id,
+                    "almacen_nombre": "Almacén A",
+                    "producto_id": p1.producto_id,
+                    "tipo_producto": "arroz",
+                    "nombre": "Arroz Diana",
+                    "marca_variedad": "Diana",
+                    "presentacion": "500 g",
+                    "precio_unitario": 3000,
+                    "cantidad": 2,
+                    "importe": 6000,
+                },
+                {
+                    "almacen_id": b.almacen_id,
+                    "almacen_nombre": "Almacén B",
+                    "producto_id": p2.producto_id,
+                    "tipo_producto": "leche",
+                    "nombre": "Leche Entera",
+                    "marca_variedad": "Alpina",
+                    "presentacion": "1 litro",
+                    "precio_unitario": 4500,
+                    "cantidad": 1,
+                    "importe": 4500,
+                },
+            ],
+            "por_almacen": [
+                {
+                    "almacen_id": a.almacen_id,
+                    "almacen_nombre": "Almacén A",
+                    "subtotal": 6000,
+                    "cupon_codigo": None,
+                    "cupon_porcentaje": None,
+                    "descuento": 0,
+                    "total": 6000,
+                },
+                {
+                    "almacen_id": b.almacen_id,
+                    "almacen_nombre": "Almacén B",
+                    "subtotal": 4500,
+                    "cupon_codigo": None,
+                    "cupon_porcentaje": None,
+                    "descuento": 0,
+                    "total": 4500,
+                },
+            ],
+            "subtotal": 10500,
+            "descuento_total": 0,
+            "total": 10500,
+            "autorizacion_datos": True,
+            "pago": True,
+        }
+
+        compra, creada = self.ctx.repo_compras.crear_compra(
+            documento, cliente_id="cliente-1", clave_idempotencia="clave-1"
+        )
+        self.assertTrue(creada)
+        repetida, creada = self.ctx.repo_compras.crear_compra(
+            documento, cliente_id="cliente-1", clave_idempotencia="clave-1"
+        )
+        self.assertFalse(creada)
+        self.assertEqual(repetida["_id"], compra["_id"])
+        self.assertEqual(self._mongo[self.base_datos]["compras"].count_documents({}), 1)
+
+        # El proyector no corre en las pruebas: se reconcilian las compras.
+        self.ctx.proyector.reconciliar_todo()
+
+        compras_a = repo_a.listar_compras_por_almacen()
+        self.assertEqual(len(compras_a), 1)
+        self.assertEqual([item["nombre"] for item in compras_a[0]["items"]], ["Arroz Diana"])
+        self.assertEqual(compras_a[0]["subtotal"], 6000)
+        self.assertEqual(compras_a[0]["telefono"], "3001234567")
+
+        compras_b = repo_b.listar_compras_por_almacen()
+        self.assertEqual(len(compras_b), 1)
+        self.assertEqual([item["nombre"] for item in compras_b[0]["items"]], ["Leche Entera"])
+        self.assertEqual(compras_b[0]["total"], 4500)
+
+        # Producto sin ventas incluido en las estadísticas.
+        p3 = self._crear_producto(a.almacen_id, nombre="Arroz Roa", precio=2500)
+        repo_a.insertar_producto(p3)
+        filas = repo_a.estadisticas_almacen()
+        por_nombre = {fila["nombre"]: fila["unidades_vendidas"] for fila in filas}
+        self.assertEqual(por_nombre, {"Arroz Diana": 2, "Arroz Roa": 0})
 
 
 if __name__ == "__main__":

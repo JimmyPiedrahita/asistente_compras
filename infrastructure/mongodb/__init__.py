@@ -1,15 +1,14 @@
-"""Cliente MongoDB, repositorio por almacén y proyección integrada."""
+"""Persistencia MongoDB de la aplicación."""
 
 from .cliente import ClienteMongo
-from .comparador import SincronizadorComparador
-from .nulo import RepositorioNulo
-from .repositorio import MongoInventarioRepository
-from .seguridad import MongoSeguridadRepository
+from .conexiones import ConexionesMongo
+from .contexto import ContextoAplicacion, construir_contexto
+from .uri import FabricaURIs
 
 __all__ = [
     "ClienteMongo",
-    "MongoInventarioRepository",
-    "MongoSeguridadRepository",
-    "RepositorioNulo",
-    "SincronizadorComparador",
+    "ConexionesMongo",
+    "ContextoAplicacion",
+    "FabricaURIs",
+    "construir_contexto",
 ]

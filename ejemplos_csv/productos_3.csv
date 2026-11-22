@@ -1,0 +1,22 @@
+tipo_producto,nombre,marca_variedad,precio,presentacion,imagen_url
+arroz,Arroz blanco,La Cosecha,4950,500 g,https://placehold.co/600x600/png?text=Arroz%20blanco
+arroz,Arroz integral,Granero Natural,6400,500 g,https://placehold.co/600x600/png?text=Arroz%20integral
+arroz,Arroz premium,Diana Selecta,7100,500 g,https://placehold.co/600x600/png?text=Arroz%20premium
+pasta,Espagueti,La Italiana,3400,500 g,https://placehold.co/600x600/png?text=Espagueti
+pasta,Macarrones,Del Campo,3250,500 g,https://placehold.co/600x600/png?text=Macarrones
+pasta,Pasta de tornillos,La Italiana,3600,500 g,https://placehold.co/600x600/png?text=Pasta%20tornillos
+leche,Leche entera,La Vaquita,4500,1 litro,https://placehold.co/600x600/png?text=Leche%20entera
+leche,Leche deslactosada,Campo Fresco,4800,1 litro,https://placehold.co/600x600/png?text=Leche%20deslactosada
+leche,Leche semidescremada,La Vaquita,4600,1 litro,https://placehold.co/600x600/png?text=Leche%20semidescremada
+aceite,Aceite vegetal,Sol Dorado,8700,1 litro,https://placehold.co/600x600/png?text=Aceite%20vegetal
+aceite,Aceite de oliva,Finca Dorada,16500,1 litro,https://placehold.co/600x600/png?text=Aceite%20de%20oliva
+aceite,Aceite girasol,Girasol Azul,8100,1 litro,https://placehold.co/600x600/png?text=Aceite%20girasol
+detergente,Detergente liquido,LimpioMax,12500,1 litro,https://placehold.co/600x600/png?text=Detergente%20liquido
+detergente,Detergente para ropa,Brillo Hogar,10900,1 litro,https://placehold.co/600x600/png?text=Detergente%20ropa
+detergente,Detergente concentrado,LimpioMax,14800,1 litro,https://placehold.co/600x600/png?text=Detergente%20concentrado
+jabon liquido,Jabon de loza,Espuma Plus,6800,1 litro,https://placehold.co/600x600/png?text=Jabon%20de%20loza
+jabon liquido,Jabon antibacterial,Espuma Plus,7900,1 litro,https://placehold.co/600x600/png?text=Jabon%20antibacterial
+jabon en barra,Jabon en barra,Blancura,7500,3 unidades,https://placehold.co/600x600/png?text=Jabon%20barra
+jabon en barra,Jabon de avena,Piel Suave,8200,3 unidades,https://placehold.co/600x600/png?text=Jabon%20avena
+papel higienico,Papel higienico doble hoja,Suave Hogar,11900,4 rollos,https://placehold.co/600x600/png?text=Papel%20higienico
+papel higienico,Papel higienico premium,Suave Hogar,14900,4 rollos,https://placehold.co/600x600/png?text=Papel%20premium

@@ -1,17 +1,26 @@
-"""Proceso del listener que mantiene ``comparador`` sincronizado.
+"""Arranque del listener de catálogo y del proyector de compras.
 
 Uso:
     python scripts/run_listener.py
 
-Requiere MongoDB en modo replica set. El proceso se reinicia solo en Docker y
-procesa los cambios de forma idempotente.
+El proceso mantiene dos tareas en segundo plano:
+
+- ``SincronizadorCatalogo``: replica productos y cupones de cada almacén en la
+  base global.
+- ``ProyectorCompras``: proyecta la parte de cada almacén de las compras
+  globales en ``compras_almacen``.
+
+Al arrancar se ejecuta una reconciliación completa para no depender del
+historial de cambios de MongoDB.
 """
 
 from __future__ import annotations
 
 import signal
 import sys
+import time
 from pathlib import Path
+from types import FrameType
 
 RAIZ = Path(__file__).resolve().parents[1]
 if str(RAIZ) not in sys.path:
@@ -19,45 +28,44 @@ if str(RAIZ) not in sys.path:
 
 from core.config import Settings  # noqa: E402
 from core.logging import configurar_logging, obtener_logger  # noqa: E402
-from infrastructure.mongodb import SincronizadorComparador  # noqa: E402
+from infrastructure.mongodb.contexto import construir_contexto  # noqa: E402
+
+logger = obtener_logger("asistente_compras.listener")
+
+_detener = False
+
+
+def _senal(signum: int, _frame: FrameType | None) -> None:
+    global _detener
+    _detener = True
+    logger.info("Señal %s recibida; deteniendo el listener", signum)
 
 
 def main() -> int:
-    try:
-        settings = Settings.from_env()
-    except RuntimeError as error:
-        print(f"Configuración inválida: {error}", file=sys.stderr)
-        return 2
-
+    settings = Settings.from_env()
     configurar_logging(settings.log_level)
-    logger = obtener_logger("asistente_compras.listener")
-
-    sincronizador = SincronizadorComparador(
-        settings.mongodb_uri,
-        settings.almacenes,
-        comparador_db=settings.mongodb_comparador_db,
-        timeout_ms=settings.mongodb_timeout_ms,
+    logger.info(
+        "Iniciando listener (global=%s, réplica=%s)",
+        settings.mongodb_global_db,
+        settings.mongodb_replica_set,
     )
 
-    def detener(signum, _frame) -> None:
-        logger.info("Señal %s recibida; deteniendo listener", signum)
-        sincronizador.detener()
-
-    signal.signal(signal.SIGTERM, detener)
-    signal.signal(signal.SIGINT, detener)
-
+    contexto = construir_contexto(settings)
+    signal.signal(signal.SIGINT, _senal)
+    signal.signal(signal.SIGTERM, _senal)
     try:
-        logger.info(
-            "Listener iniciado: %s almacenes -> %s",
-            len(settings.almacenes),
-            settings.mongodb_comparador_db,
-        )
-        sincronizador.ejecutar()
-    except RuntimeError as error:
-        logger.error("No se pudo iniciar el listener: %s", error)
-        return 3
+        logger.info("Reconciliación inicial de catálogo y compras")
+        contexto.sincronizador.reconciliar_todo()
+        contexto.proyector.reconciliar_todo()
+        contexto.sincronizador.iniciar()
+        contexto.proyector.iniciar()
+        while not _detener:
+            time.sleep(1)
     finally:
-        sincronizador.close()
+        contexto.sincronizador.detener()
+        contexto.proyector.detener()
+        contexto.cerrar()
+        logger.info("Listener detenido")
     return 0
 
 

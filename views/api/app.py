@@ -1,135 +1,88 @@
-"""Fábrica de la aplicación FastAPI (capa Vista)."""
+"""Fábrica de la aplicación FastAPI y servido de la interfaz web."""
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from controllers.sesiones import RegistroSesiones
 from core.config import Settings
 from core.logging import configurar_logging, obtener_logger
-from infrastructure.mongodb import MongoInventarioRepository, MongoSeguridadRepository
-from models.almacenes import GestorAlmacenes
-from models.seguridad import SeguridadEnMemoria
+from infrastructure.imagenes import ServicioImagenesProducto
+from infrastructure.mongodb.contexto import ContextoAplicacion, construir_contexto
 
 from .errors import registrar_manejadores
 from .routers import ROUTERS
 
 logger = obtener_logger("asistente_compras.api")
 
-RepositoryFactory = Callable[[Settings], object]
-SecurityFactory = Callable[[Settings], object]
-
-
-def _crear_repositorio(settings: Settings, repository_factory: RepositoryFactory | None):
-    if repository_factory is not None:
-        return repository_factory(settings)
-    return MongoInventarioRepository(
-        settings.mongodb_uri,
-        settings.almacenes,
-        comparador_db=settings.mongodb_comparador_db,
-        timeout_ms=settings.mongodb_timeout_ms,
-    )
-
-
-def _crear_seguridad(
-    settings: Settings,
-    security_factory: SecurityFactory | None,
-    repository_factory: RepositoryFactory | None,
-):
-    if security_factory is not None:
-        return security_factory(settings)
-    if repository_factory is not None:
-        # Las pruebas inyectan una persistencia falsa de inventario; la
-        # seguridad en memoria evita depender de un MongoDB real.
-        return SeguridadEnMemoria()
-    return MongoSeguridadRepository(
-        settings.mongodb_uri,
-        base_datos=settings.mongodb_seguridad_db,
-        timeout_ms=settings.mongodb_timeout_ms,
-    )
+_RAIZ = Path(__file__).resolve().parents[2]
+_DIR_FRONTEND = _RAIZ / "frontend" / "dist"
 
 
 def create_app(
-    settings: Settings | str | None = None,
-    repository_factory: RepositoryFactory | None = None,
+    settings: Settings | None = None,
     *,
-    security_factory: SecurityFactory | None = None,
-    mongo_uri: str | None = None,
+    contexto: ContextoAplicacion | None = None,
 ) -> FastAPI:
-    """Crea la API. MongoDB es obligatorio en ejecución real.
-
-    ``create_app("mongodb://...")`` se mantiene por compatibilidad con la
-    versión anterior; lo recomendable es pasar un ``Settings``.
-    """
-    if isinstance(settings, str):
-        mongo_uri = settings
-        settings = None
     if settings is None:
-        settings = Settings.from_env(mongo_uri=mongo_uri)
+        settings = Settings.from_env()
 
     configurar_logging(settings.log_level)
-    repositorio = _crear_repositorio(settings, repository_factory)
-    gestor = GestorAlmacenes(repositorio, settings.almacenes)
-    seguridad = _crear_seguridad(settings, security_factory, repository_factory)
-    seguridad.inicializar()  # type: ignore[attr-defined]
+    contexto = contexto or construir_contexto(settings)
     sesiones = RegistroSesiones(
-        gestor,
-        admin_clave=settings.admin_clave,
-        seguridad=seguridad,
         ttl_seconds=settings.session_ttl_seconds,
         max_sesiones=settings.max_sessions,
-        max_csv_bytes=settings.max_csv_bytes,
     )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info(
-            "API iniciada con %s almacenes y MongoDB en %s",
-            len(settings.almacenes),
-            settings.mongodb_db_prefix,
+            "API iniciada; base global: %s (modo pruebas: %s)",
+            settings.mongodb_global_db,
+            settings.modo_pruebas,
         )
         try:
             yield
         finally:
             try:
-                repositorio.close()  # type: ignore[attr-defined]
+                contexto.cerrar()
             except Exception:  # pragma: no cover - cierre defensivo
-                logger.exception("No se pudo cerrar la conexión con MongoDB")
-            try:
-                seguridad.close()  # type: ignore[attr-defined]
-            except Exception:  # pragma: no cover - cierre defensivo
-                logger.exception("No se pudo cerrar la conexión de seguridad")
+                logger.exception("No se pudieron cerrar las conexiones con MongoDB")
 
     app = FastAPI(
         title="Asistente de Compras API",
-        version="3.1.0",
+        version="5.0.0",
         description=(
-            "API REST MVC del asistente de compras multi-almacén. "
-            "Cada almacén usa una base MongoDB independiente y la base "
-            "``comparador`` integra los productos mediante Change Streams."
+            "Aplicación web de compras y comparación de productos entre almacenes. "
+            "Incluye registro de clientes, búsqueda con filtros, carrito, cupones "
+            "por almacén y pagos."
         ),
         lifespan=lifespan,
         openapi_tags=[
             {"name": "Salud", "description": "Disponibilidad de la API y MongoDB."},
-            {"name": "Almacenes", "description": "Almacenes e inventarios."},
-            {"name": "Seguridad", "description": "Roles, permisos y usuarios."},
-            {"name": "Sesiones", "description": "Sesiones de cliente, proveedor y administrador."},
-            {"name": "Lista de compras", "description": "Lista personal del cliente."},
-            {"name": "Búsqueda", "description": "Comparación entre almacenes."},
-            {"name": "Carrito", "description": "Carrito y descuentos."},
-            {"name": "Administración", "description": "Alta, precios y CSV."},
-            {"name": "Exportación", "description": "Descarga de listas y carrito en CSV."},
+            {"name": "Autenticación", "description": "Registro, login y sesión."},
+            {"name": "Cliente", "description": "Lista, búsqueda, carrito y compra."},
+            {
+                "name": "Administrador de almacén",
+                "description": "Productos, CSV, cupones, compras y estadísticas.",
+            },
+            {
+                "name": "Administrador de la aplicación",
+                "description": "Almacenes y administradores de almacén.",
+            },
         ],
     )
-    app.state.repositorio = repositorio
-    app.state.gestor = gestor
-    app.state.seguridad = seguridad
+    app.state.contexto = contexto
     app.state.sesiones = sesiones
+    app.state.settings = settings
+    app.state.imagenes = ServicioImagenesProducto.desde_settings(settings)
 
     origenes = list(settings.cors_origins)
     app.add_middleware(
@@ -138,13 +91,7 @@ def create_app(
         allow_credentials="*" not in origenes,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=[
-            "X-Request-ID",
-            "X-Total-Count",
-            "X-Limit",
-            "X-Offset",
-            "Content-Disposition",
-        ],
+        expose_headers=["X-Request-ID"],
     )
 
     @app.middleware("http")
@@ -159,10 +106,22 @@ def create_app(
 
     for router in ROUTERS:
         app.include_router(router, prefix="/api/v1")
-        app.include_router(router, prefix="/api", include_in_schema=False)
+
+    _montar_frontend(app)
+
+    return app
+
+
+def _montar_frontend(app: FastAPI) -> None:
+    assets = _DIR_FRONTEND / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
     @app.get("/", include_in_schema=False)
-    def raiz() -> dict[str, str]:
+    def raiz():
+        indice = _DIR_FRONTEND / "index.html"
+        if indice.is_file():
+            return FileResponse(indice)
         return {
             "name": "Asistente de Compras API",
             "version": app.version,
@@ -170,7 +129,14 @@ def create_app(
             "api": "/api/v1",
         }
 
-    return app
+    @app.get("/{ruta:path}", include_in_schema=False)
+    def spa(ruta: str):
+        if ruta.startswith(("api/", "docs", "redoc", "openapi")):
+            raise HTTPException(status_code=404, detail="No encontrado")
+        indice = _DIR_FRONTEND / "index.html"
+        if indice.is_file():
+            return FileResponse(indice)
+        raise HTTPException(status_code=404, detail="No encontrado")
 
 
 __all__ = ["create_app"]

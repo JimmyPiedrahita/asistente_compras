@@ -2,8 +2,12 @@ PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
 RUFF ?= .venv/bin/ruff
 NPM ?= npm
+COMPOSE ?= docker compose
 
-.PHONY: install install-dev test lint format openapi seed listener reconcile docker-up docker-down docker-seed docker-reconcile frontend-install frontend-dev frontend-build
+.PHONY: install install-dev test test-unit test-integration lint format openapi \
+	docker-up docker-down docker-logs docker-init listener rbac-test \
+	reconciliar reconciliar-catalogo reconciliar-compras rotar-secretos reset \
+	frontend-install frontend-dev frontend-build
 
 install:
 	$(PIP) install -r requirements.txt
@@ -12,7 +16,13 @@ install-dev:
 	$(PIP) install -r requirements-dev.txt
 
 test:
-	$(PYTHON) -m unittest discover -s tests -t . -v
+	$(PYTHON) -m pytest tests -q
+
+test-unit:
+	$(PYTHON) -m pytest tests/unit -q
+
+test-integration:
+	$(PYTHON) -m pytest tests/integration -q
 
 lint:
 	$(RUFF) check .
@@ -25,29 +35,41 @@ format:
 openapi:
 	$(PYTHON) scripts/exportar_openapi.py
 
-seed:
-	$(PYTHON) scripts/seed_mongodb.py
+docker-up:
+	$(COMPOSE) up -d --build
+
+docker-down:
+	$(COMPOSE) down
+
+docker-logs:
+	$(COMPOSE) logs -f
+
+docker-init:
+	$(COMPOSE) run --rm mongo-init
 
 listener:
 	$(PYTHON) scripts/run_listener.py
 
-reconcile:
-	$(PYTHON) scripts/reconciliar_comparador.py
+rbac-test:
+	$(COMPOSE) run --rm tools python scripts/verificar_rbac.py
 
-docker-up:
-	docker compose up -d --build
+reconciliar: reconciliar-catalogo reconciliar-compras
 
-docker-down:
-	docker compose down
+reconciliar-catalogo:
+	$(COMPOSE) run --rm tools python scripts/reconciliar_catalogo.py
 
-docker-seed:
-	docker compose --profile tools run --rm seed
+reconciliar-compras:
+	$(COMPOSE) run --rm tools python scripts/reconciliar_compras.py
 
-docker-reconcile:
-	docker compose exec listener python scripts/reconciliar_comparador.py
+rotar-secretos:
+	$(COMPOSE) run --rm tools python scripts/rotar_secretos_almacenes.py
+
+# Borra todos los datos de MongoDB. Úsalo solo en desarrollo.
+reset:
+	$(COMPOSE) down -v
 
 frontend-install:
-	cd frontend && $(NPM) install
+	cd frontend && $(NPM) ci
 
 frontend-dev:
 	cd frontend && $(NPM) run dev

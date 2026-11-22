@@ -1,56 +1,63 @@
-"""Carrito de compras observable."""
+"""Carrito de compras por sesión."""
 
 from __future__ import annotations
 
-from typing import Any
-
-from core.observer import SujetoObservable
-
-from .listas import ListaDoblementeEnlazada
+import uuid
+from dataclasses import dataclass, field
 
 
-class CarritoCompras(SujetoObservable):
-    """Carrito observable: notifica a la vista en cada cambio."""
+@dataclass
+class ItemCarrito:
+    item_id: str
+    almacen_id: str
+    producto_id: str
+    cantidad: int = 1
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._productos = ListaDoblementeEnlazada()
-        self._estrategia_descuento: Any = None
 
-    def agregar_producto(self, producto: Any) -> None:
-        self._productos.agregar_al_final(producto)
-        self.notificar_observadores(f"Producto '{producto.nombre}' añadido.")
+@dataclass
+class Carrito:
+    items: list[ItemCarrito] = field(default_factory=list)
+    cupones: list[str] = field(default_factory=list)
 
-    def eliminar_producto(self, indice: int) -> bool:
-        try:
-            eliminado = self._productos.eliminar_en(indice)
-        except IndexError:
-            return False
-        self.notificar_observadores(f"Producto '{eliminado.nombre}' eliminado.")
-        return True
+    def agregar(self, almacen_id: str, producto_id: str, cantidad: int = 1) -> ItemCarrito:
+        cantidad = max(1, int(cantidad))
+        for item in self.items:
+            if item.almacen_id == str(almacen_id) and item.producto_id == str(producto_id):
+                item.cantidad += cantidad
+                return item
+        item = ItemCarrito(
+            item_id=uuid.uuid4().hex,
+            almacen_id=str(almacen_id),
+            producto_id=str(producto_id),
+            cantidad=cantidad,
+        )
+        self.items.append(item)
+        return item
+
+    def quitar(self, item_id: str) -> bool:
+        antes = len(self.items)
+        self.items = [item for item in self.items if item.item_id != str(item_id)]
+        return len(self.items) != antes
+
+    def actualizar_cantidad(self, item_id: str, cantidad: int) -> bool:
+        cantidad = int(cantidad)
+        if cantidad < 1:
+            raise ValueError("La cantidad debe ser mayor que cero")
+        for item in self.items:
+            if item.item_id == str(item_id):
+                item.cantidad = cantidad
+                return True
+        return False
 
     def vaciar(self) -> None:
-        self._productos.limpiar()
-        self.notificar_observadores("Carrito vaciado.")
+        self.items.clear()
+        self.cupones.clear()
 
-    def establecer_estrategia_descuento(self, estrategia: Any) -> None:
-        self._estrategia_descuento = estrategia
-        self.notificar_observadores("Estrategia de descuento actualizada.")
-
-    def obtener_productos(self) -> list[Any]:
-        return list(self._productos)
-
-    def calcular_subtotal(self) -> float:
-        return sum(producto.obtener_precio_final() for producto in self._productos)
-
-    def calcular_total(self) -> float:
-        subtotal = self.calcular_subtotal()
-        if self._estrategia_descuento is None:
-            return subtotal
-        return self._estrategia_descuento.calcular(subtotal)
+    def almacenes(self) -> set[str]:
+        return {item.almacen_id for item in self.items}
 
     def __len__(self) -> int:
-        return len(self._productos)
+        return len(self.items)
 
 
-__all__ = ["CarritoCompras"]
+__all__ = ["Carrito", "ItemCarrito"]

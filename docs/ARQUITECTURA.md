@@ -1,337 +1,433 @@
 # Arquitectura del Asistente de Compras
 
-Este documento describe la organización MVC, el modelo de datos, la
-persistencia por almacén, la base integrada `comparador` y las decisiones de
-diseño del backend.
-
 ## 1. Vista general
+
+La aplicación es una SPA de React servida por la misma API FastAPI. La
+persistencia se separa en una base global y una base dedicada por almacén,
+conectadas mediante **Change Streams** sobre MongoDB en replica set.
 
 ```mermaid
 flowchart LR
-    Cliente[Cliente HTTP] --> API[Vista FastAPI]
-    API --> Fachada[ControladorCompras]
-    Fachada --> Lista[ControladorListaCompra]
-    Fachada --> Busqueda[ControladorBusqueda]
-    Fachada --> Carrito[ControladorCarrito]
-    Fachada --> Inventario[ControladorInventario]
-    Fachada --> Exportacion[ControladorExportacion]
-    Fachada --> Sesion[ControladorSesion]
-    Lista --> Modelo[Lista doble / Carrito]
-    Busqueda --> Estrategias[Strategy de búsqueda]
-    Carrito --> Descuentos[Strategy de descuento]
-    Inventario --> Gestor[GestorAlmacenes]
-    Gestor --> Repo[InventarioRepository]
-    Repo --> Fuente[(warehouse_1..3)]
-    Repo --> Integrada[(comparador)]
-    Listener[Listener Change Streams] --> Integrada
-    Fuente -. cambios .-> Listener
+    UI[SPA React] --> API[FastAPI /api/v1]
+    API --> SES[Sesiones en memoria]
+    API --> CTRL[Controladores]
+    CTRL --> MOD[Modelos de dominio]
+    CTRL --> CTX[ContextoAplicacion]
+    CTX --> GLOBAL[(global_asistente_compras)]
+    CTX --> ALM[(almacen_&lt;nombre&gt;_&lt;id&gt;)]
+    LIST[Listener] -->|Change Streams de catálogo| GLOBAL
+    LIST -->|Proyección de compras| ALM
 ```
 
-La API es la única superficie de presentación. No hay interfaz Tkinter ni menú
-de consola.
+La API no depende de que el listener esté vivo. La consistencia entre la base
+global y las bases de almacén es **eventual** y se puede reparar con los scripts
+de reconciliación.
 
-## 2. Capas y responsabilidades
+## 2. Capas
 
 | Capa | Directorio | Responsabilidad |
 | --- | --- | --- |
-| Vista | `views/api/` | FastAPI, validación Pydantic, serialización, errores HTTP, sesiones HTTP. |
-| Controlador | `controllers/` | Casos de uso, permisos y coordinación de consultas y escrituras. |
-| Modelo | `models/` | Entidades, reglas de negocio, estructuras enlazadas, estrategias y contrato de persistencia. |
-| Infraestructura | `infrastructure/mongodb/` | Cliente, documentos, índices, repositorio y proyector `comparador`. |
-| Núcleo | `core/` | Configuración, errores, logging, Observer y resultados tipados. |
+| Vista | `views/api/` | FastAPI, validación Pydantic, autenticación Bearer, errores HTTP y servido de la SPA. |
+| Controlador | `controllers/` | Casos de uso, permisos y coordinación del carrito, compras y administración. |
+| Modelo | `models/` | Entidades, validaciones, carrito y reglas de presentación. |
+| Infraestructura | `infrastructure/mongodb/` | Conexiones por rol, repositorios, aprovisionamiento, validación y replicación. |
+| Núcleo | `core/` | Configuración por entorno, errores y logging. |
 
-Regla de dependencias:
+Dependencias:
 
 ```text
 views -> controllers -> models
-controllers -> infrastructure (a través del protocolo InventarioRepository)
-models -> core (sin FastAPI ni PyMongo)
+controllers -> infrastructure -> MongoDB
+listener (scripts/run_listener.py) -> infrastructure -> MongoDB
 ```
 
-## 3. MVC aplicado
+La vista no accede a MongoDB y los controladores no dependen de FastAPI.
 
-### Modelo
+## 3. Roles y autenticación
 
-- `Producto`, `ProductoFisico`, `ProductoDigital`, `ProductoSuscripcion`.
-- `FabricaProductos` centraliza la construcción y validación.
-- `ListaSimple` para resultados acotados y usos en memoria.
-- `ListaDoblementeEnlazada` para la lista de compras y el carrito.
-- `Almacen` representa la metadata del almacén. Conserva una lista enlazada
-  para pruebas y usos sin persistencia, con índices auxiliares `_por_nombre` y
-  `_por_id`.
-- `GestorAlmacenes` coordina los almacenes y delega en el repositorio cuando
-  existe. Sin persistencia funciona en memoria para pruebas.
-- `CarritoCompras` extiende `SujetoObservable`.
+Roles de aplicación:
 
-### Controlador
+- `CLIENTE`: registro público, lista, búsqueda, carrito, cupones y pago.
+- `ADMINISTRADOR_ALMACEN`: productos, CSV, cupones, compras y estadísticas de su
+  almacén.
+- `ADMINISTRADOR_APP`: almacenes y administradores de almacén.
 
-`ControladorCompras` es una fachada compatible con la API anterior. Delega en
-controladores pequeños:
+El login es único. La API devuelve un `session_id` que el cliente envía como
+`Authorization: Bearer <session_id>`. Las dependencias de FastAPI comprueban el
+rol en cada endpoint; ocultar botones en la interfaz no sustituye esta validación.
 
-- `ControladorSesion`: registro, login, roles y permisos.
-- `ControladorListaCompra`: lista sin duplicados.
-- `ControladorBusqueda`: consulta `comparador` para `mejor_precio`, `catalogo`
-  y `global`.
-- `ControladorCarrito`: ítems, descuentos y resumen.
-- `ControladorInventario`: altas, precios, baja, CSV, estado y reconciliación.
-- `ControladorExportacion`: CSV de lista y carrito.
+La cuenta inicial del administrador de la aplicación se crea en
+`RepositorioUsuarios.asegurar_admin()` solo si no existe ningún usuario con rol
+`ADMINISTRADOR_APP`. El correo y la contraseña provienen de `ADMIN_EMAIL` y
+`ADMIN_PASSWORD`.
 
-Cada sesión HTTP crea su propio `ControladorCompras`, pero todos comparten el
-mismo `GestorAlmacenes` y el mismo repositorio. El catálogo no se comparte en
-memoria porque no se carga completo.
+> Las sesiones y los carritos se guardan en memoria del proceso. Por eso la API
+> se ejecuta con un solo worker y las sesiones se pierden al reiniciar. Es una
+> decisión consciente para esta versión.
 
-### Vista
+### Roles nativos de MongoDB
 
-- `views/api/app.py`: composición de FastAPI, CORS, request-id y lifespan.
-- `views/api/schemas/`: DTOs de entrada y salida.
-- `views/api/serializers.py`: conversión de dominio a JSON.
-- `views/api/errors.py`: traducción de errores a respuestas HTTP.
-- `views/api/routers/`: endpoints agrupados por recurso.
-- `views/api/dependencies.py`: sesión, repositorio y gestor compartidos.
+Las URIs se construyen en `FabricaURIs` y solo las usa el backend. Nunca se
+serializan, registran ni envían al frontend.
 
-## 4. MongoDB: almacenes y comparador
+| Usuario | Rol nativo | Uso |
+| --- | --- | --- |
+| `cliente_app` | `rol_cliente` | Catálogo global, cupones y compras del cliente. |
+| `admin_app` | `rol_admin_app` | Metadata de almacenes y lectura de catálogo global. |
+| `auth_service` | `rol_auth` | Colección `usuarios`. |
+| `validador_catalogo` | `rol_validador` | Lectura global para validar presentación y cupones. |
+| `replicador_catalogo` | `rol_catalogo` | Change Streams de catálogo y escritura de la réplica global. |
+| `proyector_compras` | `rol_proyector` | Change Stream de compras y escritura de `compras_almacen`. |
+| `provisioner` | `userAdminAnyDatabase`, `dbAdminAnyDatabase` | Crear bases, roles, usuarios e índices por almacén. |
+
+Un único usuario MongoDB atiende a todos los clientes. Cada almacén recibe un
+usuario nativo propio (`almacen_<nombre>_<id>_app`) con el rol `rol_almacen`, que
+solo puede operar sobre las colecciones de su base. Todos los administradores de
+un mismo almacén comparten ese usuario.
+
+La contraseña del usuario de cada almacén se deriva con HMAC-SHA256 a partir de
+`MONGODB_WAREHOUSE_SECRET` y del `almacen_id`. No se almacena en texto plano ni se
+reutiliza entre almacenes. Cambiar el secreto exige ejecutar
+`scripts/rotar_secretos_almacenes.py`.
+
+Los roles globales, usuarios de servicio e índices se crean con los scripts de
+`infrastructure/mongodb/init/`:
+
+| Script | Contenido |
+| --- | --- |
+| `00_replica_y_root.js` | Inicia el replica set y crea el usuario root. |
+| `10_roles.js` | Crea o actualiza los roles globales. |
+| `20_usuarios.js` | Crea o actualiza los usuarios de servicio. |
+| `30_indices.js` | Asegura los índices de la base global. |
+
+Los privilegios de `rol_catalogo` y `rol_proyector` sobre una base de almacén se
+agregan dinámicamente al aprovisionar el almacén.
+
+## 4. Modelo de datos
+
+### Base global `global_asistente_compras`
+
+```text
+global_asistente_compras
+├── usuarios
+├── almacenes
+├── productos_global
+├── cupones_global
+├── compras
+├── sync_state_catalogo
+└── sync_state_compras
+```
+
+#### `usuarios`
+
+Campos principales: `_id`, `nombre`, `email`, `email_normalizado`,
+`password_hash`, `rol`, `almacen_id`, `telefono`, `direccion`, `ciudad`,
+`autoriza_datos`, `activo` y `creado_en`.
+
+- `email_normalizado` es único (`email_unico`).
+- `(rol, almacen_id)` tiene índice `rol_almacen`.
+- Las contraseñas se guardan con PBKDF2-HMAC-SHA256 y salt aleatorio.
+- Un administrador de almacén tiene exactamente un `almacen_id`.
+
+#### `almacenes`
+
+`_id`, `nombre`, `nombre_normalizado`, `db_name`, `mongo_user`, `estado` y
+`creado_en`. Los campos `db_name`, `mongo_user` y `estado` son metadata interna y
+nunca se serializan en la API.
+
+- `nombre_normalizado` es único (`nombre_unico`).
+- `db_name` es único (`db_unica`) y `mongo_user` es único (`usuario_unico`).
+- `estado` pasa por `creando`, `activo` y `error`.
+- No se editan ni eliminan desde la aplicación.
+
+#### `productos_global`
+
+Réplica de solo lectura para el cliente del catálogo de todos los almacenes.
+Conserva los mismos campos que el producto de origen e índices por tipo, precio,
+almacén, presentación y `producto_id`.
+
+#### `cupones_global`
+
+Réplica de los cupones para que el cliente los consulte y aplique. `_id` es el
+`cupon_id` del almacén, `codigo_normalizado` es único en toda la aplicación
+(`codigo_unico`) y `almacen_id` tiene índice.
+
+#### `compras`
+
+`_id`, `cliente_id`, `clave_idempotencia`, `cliente_nombre`, `datos_entrega`,
+`items`, `por_almacen`, `subtotal`, `descuento_total`, `total`,
+`autorizacion_datos`, `pago` y `fecha`.
+
+- `(cliente_id, clave_idempotencia)` es único (`idempotencia`).
+- `(items.almacen_id, fecha)` tiene índice `almacen_fecha`.
+- `items` es una copia inmutable de nombre, presentación, precio, cantidad e
+  importe.
+- `por_almacen` conserva subtotal, cupón, porcentaje, descuento y total de cada
+  almacén.
+- `datos_entrega` conserva nombre, teléfono, dirección y ciudad confirmados.
+
+#### Estado de sincronización
+
+- `sync_state_catalogo`: un documento por almacén y colección con el token de
+  reanudación (`resume_after`) y el estado del sincronizador.
+- `sync_state_compras`: token del Change Stream de `compras` y estado del
+  proyector.
+
+### Base de un almacén `almacen_<nombre>_<id>`
+
+```text
+almacen_<nombre>_<id>
+├── productos
+├── cupones
+└── compras_almacen
+```
+
+#### `productos`
+
+`_id`, `almacen_id`, `tipo_producto`, `tipo_normalizado`, `nombre`,
+`nombre_normalizado`, `marca_variedad`, `marca_normalizada`, `precio`,
+`presentacion`, `presentacion_normalizada`, `creado_en` y `actualizado_en`.
+
+Índices:
+
+- `(almacen_id, tipo_normalizado)`
+- `(tipo_normalizado, precio)`
+- `presentacion_normalizada`
+
+La presentación se valida contra todos los productos del mismo
+`tipo_normalizado`, incluso de otros almacenes. Si ya existe una presentación
+estándar para el tipo, cualquier alta o edición debe usarla.
+
+#### `cupones`
+
+`_id`, `codigo`, `codigo_normalizado` único dentro del almacén, `almacen_id`,
+`porcentaje` y `creado_en`. El porcentaje debe estar en `(0, 100]`. La unicidad
+global del código se valida además contra `cupones_global` con la conexión de
+solo lectura.
+
+#### `compras_almacen`
+
+Proyección de la parte de cada compra que corresponde al almacén. Contiene
+`compra_id`, `cliente_id`, `cliente_nombre`, `fecha`, datos de entrega, los
+`items` del almacén, `subtotal`, cupón, descuento y total. Índices por
+`compra_id` y por `fecha`.
+
+## 5. Conexiones y contexto
+
+`construir_contexto(settings)` es el único punto de cableado:
+
+1. `FabricaURIs` construye la URI de cada rol y de cada almacén.
+2. `ConexionesMongo` reutiliza un `MongoClient` por URI y abre las bases de forma
+   perezosa.
+3. Cada repositorio recibe una `Database` ya construida con la conexión de su
+   rol. Así el aislamiento se respeta también en el código.
+4. `DirectorioAlmacenes` resuelve la metadata de un almacén y construye su
+   `RepositorioAlmacen`.
+5. `ServicioAprovisionamiento` crea roles, usuarios e índices al dar de alta un
+   almacén.
+6. `ServicioValidacion` usa la conexión de solo lectura para las reglas globales.
+7. `SincronizadorCatalogo` y `ProyectorCompras` se ejecutan en el proceso
+   `listener`.
+
+En `modo_pruebas`, `FabricaURIs` devuelve el mismo `MONGODB_URI` para todas las
+conexiones. Los repositorios siguen usando nombres de base distintos, de modo que
+el aislamiento lógico se puede probar sin crear usuarios nativos.
+
+## 6. Aprovisionamiento de un almacén
+
+`ServicioAprovisionamiento.crear_almacen()`:
+
+1. Normaliza el nombre y comprueba que no exista otro almacén con el mismo
+   nombre normalizado.
+2. Genera `almacen_id`, `db_name` y `mongo_user`.
+3. Registra el almacén en `global_asistente_compras.almacenes` con estado
+   `creando`.
+4. Crea el rol `rol_almacen` en la base del almacén con permisos sobre
+   `productos`, `cupones` y `compras_almacen`.
+5. Crea el usuario nativo con la contraseña derivada por HMAC.
+6. Amplía `rol_catalogo` y `rol_proyector` con los privilegios de la nueva base.
+7. Crea los índices de `productos`, `cupones` y `compras_almacen`.
+8. Marca el almacén como `activo`.
+
+Si algo falla, el almacén queda en estado `error` y la API responde `503`. El
+proceso es idempotente: si el rol o el usuario ya existen, se actualizan.
+
+## 7. Replicación y consistencia
+
+### Sincronizador de catálogo
+
+El proceso `listener` ejecuta un gerente que cada `LISTENER_REFRESH_SECONDS`
+descubre almacenes activos y abre un hilo por almacén. Cada hilo mantiene **dos
+Change Streams**, uno para `productos` y otro para `cupones`, con tokens
+independientes.
+
+- `insert`/`update`: relee el documento actual y hace upsert en la réplica
+  global. Si el documento ya no existe, elimina la réplica.
+- `delete`: elimina la réplica global.
+- Si el historial de cambios se perdió (`code 286`), se reconcilia el almacén.
+- La primera vez que un hilo abre el stream, primero se suscribe y luego
+  reconcilia el catálogo completo. Así no se pierden productos creados antes de
+  que el listener descubriera el almacén.
+
+### Proyector de compras
+
+Escucha `compras` en la base global y, por cada compra, recorre `por_almacen`.
+Para cada almacén escribe en `compras_almacen` solo sus ítems, su subtotal, su
+cupón, su descuento y su total. Una compra eliminada se elimina de todas las
+proyecciones.
+
+### Consistencia eventual
+
+La escritura del catálogo ocurre primero en la base del almacén. La réplica
+global y la validación de unicidad global se actualizan después. Por eso:
+
+- La validación global de presentación y de cupón es eventual.
+- Tras escribir en la base del almacén puede ser necesario reconciliar antes de
+  comprobar un duplicado global.
+- Si el listener está detenido, la API sigue operando; los scripts
+  `reconciliar_catalogo.py` y `reconciliar_compras.py` reconstruyen el estado.
+
+## 8. Flujo de compra
 
 ```mermaid
-flowchart TB
-    Cliente[MongoClient único con pool]
-    Cliente --> DB1[(warehouse_1)]
-    Cliente --> DB2[(warehouse_2)]
-    Cliente --> DB3[(warehouse_3)]
-    Cliente --> CMP[(comparador)]
-    DB1 --> C1[productos]
-    DB2 --> C2[productos]
-    DB3 --> C3[productos]
-    CMP --> CP[productos]
-    CMP --> CS[sync_state]
+sequenceDiagram
+    participant C as Cliente
+    participant A as API
+    participant G as Base global
+    participant L as Listener
+    participant W as Base del almacén
+    C->>A: Lista de compras
+    C->>A: POST /search (modo)
+    A->>G: productos_global / cupones_global
+    A-->>C: Grupos con opciones y avisos
+    C->>A: POST /cart/items
+    C->>A: POST /cart/coupons
+    A->>G: Validar cupón replicado
+    A-->>C: Resumen recalculado
+    C->>A: POST /checkout (total + clave)
+    A->>A: Recalcular resumen
+    alt Total cambió
+        A-->>C: 409 con nuevo resumen
+    else Total vigente
+        A->>G: Insertar compra idempotente
+        A-->>C: Comprobante
+        G-->>L: Change Stream de compras
+        L->>W: Upsert en compras_almacen
+    end
 ```
 
-- Un `MongoClient` por proceso, no uno por base.
-- Una base por almacén: `{MONGODB_DB_PREFIX}_{id}`. Es la fuente de verdad.
-- Una colección `productos` por base de almacén.
-- `_id` es el `producto_id` estable del dominio.
-- Campos normalizados e índices:
-  - `nombre_normalizado`
-  - `(nombre_normalizado, marca_normalizada)`
-- La base `{MONGODB_COMPARADOR_DB}` contiene el read model y su estado.
-- El repositorio convierte documentos a entidades y viceversa; la vista nunca
-  ve documentos de Mongo.
+### Búsqueda
 
-### Documento de almacén
+El controlador `ControladorCatalogo` recibe la lista y el modo:
 
-```json
-{
-  "_id": "5f0f...",
-  "nombre": "Leche",
-  "nombre_normalizado": "leche",
-  "marca": "Ilolay",
-  "marca_normalizada": "ilolay",
-  "categoria": "Lacteos",
-  "tipo": "normal",
-  "precio": 1000,
-  "creado_en": "2026-01-01T00:00:00Z",
-  "actualizado_en": "2026-01-02T00:00:00Z"
-}
-```
+1. **`catalogo`**: todas las coincidencias, ordenadas por almacén, nombre de
+   producto, precio e identificador.
+2. **`mejor_precio`**: el producto más barato de cada almacén para cada término.
+   Desempate: nombre de producto y luego identificador.
+3. **`global`**: el más barato entre todos los almacenes para cada término.
+   Desempate: nombre del almacén, nombre del producto e identificador.
 
-### Documento integrado
+Los filtros usan el precio registrado antes de cupones y leen de
+`productos_global`.
 
-```json
-{
-  "_id": "1_5f0f...",
-  "producto_id": "5f0f...",
-  "almacen_id": 1,
-  "almacen_nombre": "Almacen 1",
-  "nombre": "Leche",
-  "nombre_normalizado": "leche",
-  "marca": "Ilolay",
-  "marca_normalizada": "ilolay",
-  "categoria": "Lacteos",
-  "tipo": "normal",
-  "precio": 1000,
-  "precio_final": 1000,
-  "sincronizado_en": "2026-01-02T00:00:00Z"
-}
-```
+### Carrito y cupones
 
-El `_id` compuesto `"{almacen_id}_{producto_id}"` permite que el mismo nombre
-exista en varios almacenes con identificadores distintos.
+`ControladorCarrito` mantiene los ítems y códigos de cupón en la sesión y
+recalcula el resumen en cada operación:
 
-Índices de `comparador.productos`:
+- Retira productos o almacenes que ya no existen e informa con avisos.
+- Valida que el cupón exista y que el carrito tenga productos de su almacén.
+- Impide repetir un cupón o acumular dos del mismo almacén.
+- Limita la compra a tres cupones.
+- Calcula cada descuento sobre el subtotal de su almacén, nunca sobre el total
+  general.
 
-- `(nombre_normalizado, precio_final)`
-- `(almacen_id, nombre_normalizado, precio_final)`
-- `producto_id`
-- `almacen_id`
+El carrito no se persiste en esta versión.
 
-## 5. Sincronización con Change Streams
+### Checkout
 
-MongoDB debe ejecutarse como **replica set**. El proceso
-`scripts/run_listener.py` usa `SincronizadorComparador`:
+`ControladorCompras.comprar()` vuelve a calcular el resumen. Si el cliente envía
+`total_esperado` y no coincide, responde `409` con el nuevo resumen para que
+confirme otra vez. La compra se inserta con una clave de idempotencia única por
+cliente; un reintento con la misma clave devuelve la compra existente en lugar de
+duplicarla.
 
-1. Si no existe `resume_token`, reconstruye `comparador` desde los almacenes.
-2. Abre un Change Stream sobre `warehouse_* .productos`.
-3. Aplica `insert`, `update`, `replace` y `delete` de forma idempotente.
-4. Guarda el `resume_token` y el estado en `comparador.sync_state`.
-5. Ante `ChangeStreamHistoryLost` (código 286), reconstruye y reabre el stream.
-6. Reintenta con backoff si se pierde la conexión.
+## 9. Administración
 
-La reconciliación usa una marca `_reconciliacion` por ejecución para eliminar
-documentos obsoletos sin mantener en memoria todos los ids del catálogo. El
-borrado solo afecta a documentos con `sincronizado_en` anterior al inicio de la
-reconciliación, de modo que un evento aplicado por otro proceso mientras tanto
-no se pierde.
+### Administrador de almacén
 
-La consistencia es eventual. La API no proyecta cambios de forma síncrona: el
-administrador escribe en `warehouse_*` y el listener actualiza `comparador`.
+Todas las consultas usan el `almacen_id` de la sesión y el repositorio de la base
+del almacén. No puede indicar otro almacén en el cuerpo de la petición.
 
-## 6. Consultas sin caché del catálogo
+- Productos: alta, edición completa, eliminación e importación CSV atómica.
+- Cupones: alta, listado y eliminación.
+- Compras: lee `compras_almacen`, que contiene solo la parte de su almacén.
+- Estadísticas: unidades vendidas por producto actual, incluyendo los productos
+  con cero ventas. Empates alfabéticos por nombre.
 
-La API no carga inventarios completos al arrancar. Las consultas se resuelven
-en MongoDB con índices y límites:
+### Administrador de la aplicación
 
-| Consulta | Fuente | Implementación |
-| --- | --- | --- |
-| Listado por almacén | `warehouse_X` | `find().sort().skip().limit()` y `X-Total-Count`. |
-| `mejor_precio` | `comparador` | Agregación agrupada por almacén y nombre. |
-| `catalogo` | `comparador` | `find()` paginado con `limit` y `offset`. |
-| `global` | `comparador` | Agregación: el más barato por nombre. |
-| Carrito por `producto_id` | `warehouse_X` | `find_one` indexado por `_id`. |
-| Estado del listener | `comparador.sync_state` | Documento `_id = "global"`. |
+Solo puede crear almacenes y administradores de almacén, y actualizar sus
+credenciales. No tiene rutas para productos, cupones, compras, estadísticas ni
+funciones de cliente. Al crear un almacén se dispara el aprovisionamiento de su
+base y su usuario nativo.
 
-No se cachea `comparador` completo. La memoria por petición queda acotada por
-`limit` y por el tamaño de la lista de compras del usuario.
+## 10. Interfaz
 
-Las listas enlazadas se mantienen para la lista de compras, el carrito y los
-resultados acotados de una consulta. Las sesiones siguen en memoria, por lo que
-el despliegue recomendado usa un único worker de Uvicorn.
+`frontend/src/App.jsx` decide la navegación según el rol de la sesión:
 
-## 7. Sesiones y permisos
+- Cliente: lista y carrito.
+- Administrador de almacén: productos, cupones, compras y estadísticas.
+- Administrador de la aplicación: almacenes y administradores.
 
-- `RegistroSesiones` crea tokens aleatorios y mantiene un `dict` protegido por
-  lock.
-- TTL deslizante: cada acceso válido actualiza `ultimo_acceso`.
-- Límite máximo: al superar `MAX_SESSIONS` se expulsa la sesión menos usada.
-- El token se acepta en la ruta o en `Authorization: Bearer`.
-- Los roles son `INVITADO`, `CLIENTE` y `ADMIN`.
-- La matriz de permisos vive en `models/permisos.py`.
-- `ADMIN_CLAVE` se compara con `secrets.compare_digest` y es obligatoria.
+`AppContext` conserva la sesión en `localStorage`, valida el token contra
+`/auth/me`, gestiona el cierre de sesión y muestra notificaciones. `api.js`
+centraliza las llamadas HTTP y normaliza los errores.
 
-## 8. Resultado de casos de uso
+Las sesiones del backend se almacenan en memoria. Reiniciar la API invalida las
+sesiones existentes y obliga a iniciar sesión nuevamente.
 
-Los controladores devuelven `Resultado`, un `str, Enum`:
+En producción, `create_app()` monta `frontend/dist` y sirve `index.html` para las
+rutas de la SPA. En desarrollo, Vite redirige `/api` al backend.
 
-```python
-Resultado.OK == "ok"  # compatibilidad con la API anterior
-bool(Resultado.OK) is True
-bool(Resultado.DENEGADO) is False
-```
-
-La vista traduce cada valor a un código HTTP:
-
-| Resultado | HTTP |
-| --- | --- |
-| `OK` | 200/201 |
-| `VACIO` | 400 |
-| `INVALIDO` | 400/422 |
-| `DENEGADO` | 403 |
-| `NO_ENCONTRADO` | 404 |
-| `DUPLICADO` / `CONFLICTO` | 409 |
-
-Los errores de aplicación (`core/errors.py`) y las validaciones de Pydantic se
-serializan con el formato:
-
-```json
-{
-  "error": "Mensaje legible",
-  "codigo": "codigo_estable",
-  "detalles": {}
-}
-```
-
-## 9. Patrones
-
-- **Factory Method**: `FabricaProductos.crear_producto`.
-- **Strategy**: `BusquedaMejorPrecioStrategy`, `BusquedaCatalogoStrategy`,
-  `MejorPrecioGlobalStrategy`, `DescuentoPorcentaje`, `DescuentoFijo`.
-- **Observer**: `CarritoCompras` notifica a la vista; en API se usa
-  `ObservadorNulo`.
-- **Repository**: `InventarioRepository`, `MongoInventarioRepository`,
-  `RepositorioNulo`.
-- **Facade**: `ControladorCompras`.
-- **Dependency Injection**: FastAPI inyecta sesión, gestor y repositorio.
-
-## 10. Pruebas
-
-- `tests/unit/test_listas.py`: estructuras, observer y carrito.
-- `tests/unit/test_productos.py`: factory, validaciones y clonado.
-- `tests/unit/test_estrategias.py`: búsquedas, descuentos e índices.
-- `tests/unit/test_comparador.py`: documentos, `_id` compuesto y pipeline.
-- `tests/unit/test_config.py`: variables, prefijos y base integrada.
-- `tests/unit/test_controladores.py`: flujo completo de casos de uso.
-- `tests/unit/test_sesiones.py`: TTL, límite y aislamiento.
-- `tests/integration/test_api.py`: API con `PersistenciaFalsa`.
-- `tests/integration/test_mongodb.py`: MongoDB real, réplica, paginación,
-  reconciliación y Change Streams.
-
-Comando principal:
-
-```bash
-python -m unittest discover -s tests -t .
-```
-
-Con MongoDB real en replica set:
-
-```bash
-docker compose up -d mongodb mongo-init
-MONGODB_URI='mongodb://127.0.0.1:27017/?directConnection=true' \
-  ADMIN_CLAVE=test-admin-key \
-  python -m unittest discover -s tests -t . -v
-```
+El contrato HTTP y la interfaz no cambian con el modelo multi-base: las URIs, los
+nombres de base y los usuarios de MongoDB son detalles internos del backend.
 
 ## 11. Operación
 
-- `/api/v1/health/live`: no toca MongoDB.
-- `/api/v1/health/ready`: hace ping a MongoDB.
-- `scripts/run_listener.py`: listener único; se reinicia solo en Docker.
-- `scripts/reconciliar_comparador.py`: reconstrucción manual.
-- `GET /admin/comparador/status`: estado, documentos y último evento.
-- `POST /admin/comparador/reconciliar`: fuerza la reconstrucción.
-- `POST /admin/reload`: alias de compatibilidad para reconciliar.
-- Logs con `request_id` en errores no controlados.
-- CORS configurable.
-- Dockerfile con usuario no root y healthcheck.
-- `docker compose --profile tools run --rm seed` para datos de ejemplo.
+Servicios de `docker-compose.yml`:
 
-Orden de arranque:
+| Servicio | Función |
+| --- | --- |
+| `mongo-keyfile` | Genera una vez el keyfile del replica set. |
+| `mongodb` | MongoDB 7.0 con `--replSet rs0`, `--auth` y keyfile. |
+| `mongo-init` | Inicia el replica set y ejecuta roles, usuarios e índices. |
+| `app` | API FastAPI y SPA compilada. |
+| `listener` | Sincronizador de catálogo y proyector de compras. |
+| `tools` | Contenedor de scripts (perfil `tools`). |
 
-```text
-mongodb (--replSet rs0)
-    -> mongo-init (rs.initiate o rs.reconfig al host anunciado)
-    -> seed (opcional)
-    -> listener
-    -> app
-```
+- `mongo_data` conserva los datos entre reinicios; `mongo_keyfile` conserva el
+  keyfile.
+- `docker compose down -v` elimina contenedores y datos.
+- La API expone `/api/v1/health/ready` para el healthcheck del contenedor.
+- La API se publica únicamente en `127.0.0.1:8000`; los despliegues públicos
+  deben ubicarse detrás de un proxy HTTPS.
+- El frontend se compila en una etapa Node del `Dockerfile`.
+- Los scripts operativos se ejecutan con
+  `docker compose run --rm tools python scripts/<script>.py`.
 
-`mongo-init` comprueba el host anunciado por el replica set y aplica
-`rs.reconfig({ force: true })` si el volumen existente apunta a otro hostname
-(por ejemplo `localhost:27017`, inalcanzable desde otros contenedores). El host
-se controla con `MONGO_REPLICA_HOST` y por defecto es `mongodb:27017`.
+## 12. Pruebas
 
-En CI el replica set se arranca con `docker run --network host`, se inicia con
-`rs.initiate({ host: "127.0.0.1:27017" })` y las pruebas usan
-`MONGODB_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0`.
+- `tests/unit/`: configuración, modelos, sesiones, catálogo, carrito, URIs,
+  replicación y aprovisionamiento con dobles.
+- `tests/integration/`: API y repositorios contra MongoDB real. Se omiten sin
+  `MONGODB_URI`, crean una base global temporal y una base de almacén por prueba,
+  y ejecutan la reconciliación de forma explícita porque el listener no corre.
 
-## 12. Decisiones relevantes
+La integración cubre el flujo completo, los tres filtros, cupones, presentación,
+CSV atómico, compras por almacén, estadísticas, idempotencia, aislamiento entre
+almacenes, replicación de catálogo y proyección de compras.
 
-1. **Una base por almacén** para aislamiento físico y consultas independientes.
-2. **Una base integrada `comparador`** para búsquedas globales indexadas.
-3. **Change Streams** para mantener la proyección sin acoplar la API al
-   listener.
-4. **Sin caché del catálogo**; paginación y consultas con índices.
-5. **`_id` compuesto** para que un mismo producto coexista en varios almacenes.
-6. **`precio_final` proyectado** para no recalcular envío o suscripción en cada
-   consulta.
-7. **Reconciliación reconstruible**; `comparador` no es la única copia.
-8. **Sin clave administrativa por defecto**; el arranque falla si falta.
-9. **Compatibilidad `/api`** además de `/api/v1`.
-10. **Contrato OpenAPI generado** desde FastAPI y validado en CI.
+En CI se levanta MongoDB 7.0 como replica set con autenticación, se ejecutan
+lint, formato y pruebas, se verifica el RBAC nativo de cada rol, se compila el
+frontend y se comprueba que `openapi.yaml` esté actualizado.

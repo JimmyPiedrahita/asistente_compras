@@ -18,13 +18,19 @@ if str(RAIZ) not in sys.path:
 import yaml  # noqa: E402
 
 from core.config import Settings  # noqa: E402
-from infrastructure.mongodb import RepositorioNulo  # noqa: E402
 from views.api.app import create_app  # noqa: E402
+
+
+class ContextoSinConexion:
+    """Doble mínimo para generar el contrato sin abrir conexiones."""
+
+    def cerrar(self) -> None:
+        return None
 
 
 def generar(salida: Path) -> None:
     settings = Settings.de_pruebas()
-    app = create_app(settings, repository_factory=lambda _: RepositorioNulo())
+    app = create_app(settings, contexto=ContextoSinConexion())  # type: ignore[arg-type]
     esquema = app.openapi()
     esquema = {
         "openapi": esquema["openapi"],

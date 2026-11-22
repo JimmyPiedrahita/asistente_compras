@@ -5,12 +5,33 @@ on:
     branches: ["**"]
   pull_request:
 
+env:
+  MONGO_ROOT_USER: root
+  MONGO_ROOT_PASSWORD: RootPass2026
+  MONGODB_GLOBAL_DB: global_asistente_compras
+  MONGODB_ALMACEN_PREFIX: almacen_
+  MONGODB_WAREHOUSE_SECRET: warehouse-secret-ci-cambiar-en-produccion
+  MONGO_CLIENTE_USER: cliente_app
+  MONGO_CLIENTE_PASSWORD: ClientePass2026
+  MONGO_ADMIN_APP_USER: admin_app
+  MONGO_ADMIN_APP_PASSWORD: AdminAppPass2026
+  MONGO_AUTH_USER: auth_service
+  MONGO_AUTH_PASSWORD: AuthPass2026
+  MONGO_VALIDADOR_USER: validador_catalogo
+  MONGO_VALIDADOR_PASSWORD: ValidadorPass2026
+  MONGO_CATALOGO_USER: replicador_catalogo
+  MONGO_CATALOGO_PASSWORD: CatalogoPass2026
+  MONGO_COMPRAS_USER: proyector_compras
+  MONGO_COMPRAS_PASSWORD: ComprasPass2026
+  MONGO_PROVISIONER_USER: provisioner
+  MONGO_PROVISIONER_PASSWORD: ProvisionerPass2026
+  ADMIN_EMAIL: admin-ci@example.com
+  ADMIN_PASSWORD: AdminCiPass2026
+  MONGODB_URI: mongodb://root:RootPass2026@127.0.0.1:27017/?authSource=admin&replicaSet=rs0
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
-      ADMIN_CLAVE: test-admin-key
     steps:
       - uses: actions/checkout@v4
 
@@ -23,36 +44,55 @@ jobs:
             requirements-dev.txt
             pyproject.toml
 
-      - name: Iniciar MongoDB en replica set
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Iniciar MongoDB como replica set con autenticación
         run: |
-          docker run -d --name mongodb --network host \
-            mongo:7.0 --replSet rs0 --bind_ip_all
-          listo=0
+          docker volume create mongo_keyfile_ci
+          docker run --rm -v mongo_keyfile_ci:/keys mongo:7.0 bash -c \
+            'openssl rand -base64 756 > /keys/keyfile && chown 999:999 /keys/keyfile && chmod 400 /keys/keyfile'
+          docker run -d --name mongodb \
+            -p 27017:27017 \
+            -v mongo_keyfile_ci:/etc/mongo \
+            -v "$PWD/infrastructure/mongodb/init:/scripts:ro" \
+            mongo:7.0 \
+            mongod --bind_ip_all --replSet rs0 --keyFile /etc/mongo/keyfile --auth
           for _ in $(seq 1 60); do
             if docker exec mongodb mongosh --quiet \
               --eval 'db.adminCommand({ ping: 1 }).ok' | grep -q 1; then
-              listo=1
-              break
-            fi
-            sleep 1
-          done
-          if [ "$listo" -ne 1 ]; then
-            echo "MongoDB no respondió" >&2
-            docker logs mongodb
-            exit 1
-          fi
-          docker exec mongodb mongosh --quiet --eval \
-            'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
-          for _ in $(seq 1 60); do
-            if docker exec mongodb mongosh --quiet \
-              --eval 'db.hello().isWritablePrimary' | grep -q true; then
               exit 0
             fi
             sleep 1
           done
-          echo "El replica set no llegó a primario" >&2
+          echo "MongoDB no respondió" >&2
           docker logs mongodb
           exit 1
+
+      - name: Inicializar replica set, roles, usuarios e índices
+        run: |
+          docker exec \
+            -e MONGO_ROOT_USER -e MONGO_ROOT_PASSWORD \
+            -e MONGO_REPLICA_HOST=127.0.0.1:27017 \
+            -e MONGODB_GLOBAL_DB \
+            -e MONGO_CLIENTE_USER -e MONGO_CLIENTE_PASSWORD \
+            -e MONGO_ADMIN_APP_USER -e MONGO_ADMIN_APP_PASSWORD \
+            -e MONGO_AUTH_USER -e MONGO_AUTH_PASSWORD \
+            -e MONGO_VALIDADOR_USER -e MONGO_VALIDADOR_PASSWORD \
+            -e MONGO_CATALOGO_USER -e MONGO_CATALOGO_PASSWORD \
+            -e MONGO_COMPRAS_USER -e MONGO_COMPRAS_PASSWORD \
+            -e MONGO_PROVISIONER_USER -e MONGO_PROVISIONER_PASSWORD \
+            mongodb bash -c '
+              set -e
+              for script in /scripts/00_replica_y_root.js /scripts/10_roles.js \
+                /scripts/20_usuarios.js /scripts/30_indices.js; do
+                echo "==> $script"
+                mongosh --quiet --host 127.0.0.1:27017 --file "$script"
+              done
+            '
 
       - name: Instalar dependencias
         run: |
@@ -66,7 +106,20 @@ jobs:
         run: ruff format --check .
 
       - name: Pruebas
-        run: python -m unittest discover -s tests -t . -v
+        run: python -m pytest tests -q
+
+      - name: RBAC nativo de MongoDB
+        env:
+          MONGODB_HOST: 127.0.0.1:27017
+          MONGODB_REPLICA_SET: rs0
+          MONGODB_AUTH_SOURCE: admin
+        run: python scripts/verificar_rbac.py
+
+      - name: Compilar interfaz
+        run: |
+          cd frontend
+          npm ci
+          npm run build
 
       - name: OpenAPI actualizado
         run: |
