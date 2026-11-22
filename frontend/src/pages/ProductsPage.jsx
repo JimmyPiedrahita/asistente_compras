@@ -22,7 +22,7 @@ const VACIO = {
   presentacion: "",
 };
 
-const CABECERAS = "tipo_producto,nombre,marca_variedad,precio,presentacion";
+const CABECERAS = "tipo_producto,nombre,marca_variedad,precio,presentacion,imagen_url";
 
 export default function ProductsPage() {
   const { token, notify, notifyError } = useApp();
@@ -497,6 +497,7 @@ export default function ProductsPage() {
               <li>· Archivo UTF-8 separado por comas, con encabezados en la primera fila.</li>
               <li>· <span className="font-medium text-stone-700">tipo_producto</span>, <span className="font-medium text-stone-700">nombre</span>, <span className="font-medium text-stone-700">precio</span> y <span className="font-medium text-stone-700">presentacion</span> son obligatorios.</li>
               <li>· <span className="font-medium text-stone-700">marca_variedad</span> es opcional.</li>
+              <li>· <span className="font-medium text-stone-700">imagen_url</span> es opcional y debe ser una URL HTTP o HTTPS válida.</li>
               <li>· Precios sin símbolos de moneda ni separadores de miles; decimales con punto.</li>
               <li>· No incluyas una columna de almacén: se asigna automáticamente.</li>
             </ul>
