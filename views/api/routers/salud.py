@@ -4,27 +4,33 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from ..dependencies import obtener_repositorio
-from ..schemas import HealthRespuesta
+from infrastructure.mongodb.contexto import ContextoAplicacion
+
+from ..dependencies import obtener_contexto
 
 router = APIRouter(tags=["Salud"])
 
 
-@router.get("/health", response_model=HealthRespuesta, response_model_exclude_none=True)
-def health(repositorio=Depends(obtener_repositorio)) -> dict[str, str]:
-    repositorio.ping()
-    return {"status": "ok", "database": "mongodb"}
+def _verificar(contexto: ContextoAplicacion) -> None:
+    contexto.conexiones.ping(contexto.fabrica.uri_auth())
+    contexto.conexiones.ping(contexto.fabrica.uri_admin_app())
 
 
-@router.get("/health/live", response_model=HealthRespuesta, response_model_exclude_none=True)
+@router.get("/health")
+def health(contexto: ContextoAplicacion = Depends(obtener_contexto)) -> dict[str, str]:
+    _verificar(contexto)
+    return {"status": "ok", "database": "ok"}
+
+
+@router.get("/health/live")
 def health_live() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/health/ready", response_model=HealthRespuesta, response_model_exclude_none=True)
-def health_ready(repositorio=Depends(obtener_repositorio)) -> dict[str, str]:
-    repositorio.ping()
-    return {"status": "ready", "database": "mongodb"}
+@router.get("/health/ready")
+def health_ready(contexto: ContextoAplicacion = Depends(obtener_contexto)) -> dict[str, str]:
+    _verificar(contexto)
+    return {"status": "ready", "database": "ok"}
 
 
 __all__ = ["router"]

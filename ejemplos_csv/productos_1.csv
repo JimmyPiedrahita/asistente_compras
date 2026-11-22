@@ -1,0 +1,19 @@
+tipo_producto,nombre,marca_variedad,precio,presentacion,imagen_url
+arroz,Arroz blanco,La Cosecha,4800,500 g,https://placehold.co/600x600/png?text=Arroz%20blanco
+arroz,Arroz integral,Granero Natural,6200,500 g,https://placehold.co/600x600/png?text=Arroz%20integral
+arroz,Arroz premium,Diana Selecta,6800,500 g,https://placehold.co/600x600/png?text=Arroz%20premium
+pasta,Espagueti,La Italiana,3500,500 g,https://placehold.co/600x600/png?text=Espagueti
+pasta,Macarrones,Del Campo,3300,500 g,https://placehold.co/600x600/png?text=Macarrones
+pasta,Pasta de tornillos,La Italiana,3650,500 g,https://placehold.co/600x600/png?text=Pasta%20tornillos
+leche,Leche entera,La Vaquita,4200,1 litro,https://placehold.co/600x600/png?text=Leche%20entera
+leche,Leche semidescremada,La Vaquita,4400,1 litro,https://placehold.co/600x600/png?text=Leche%20semidescremada
+leche,Leche sin lactosa,Campo Fresco,5200,1 litro,https://placehold.co/600x600/png?text=Leche%20sin%20lactosa
+aceite,Aceite vegetal,Sol Dorado,8900,1 litro,https://placehold.co/600x600/png?text=Aceite%20vegetal
+aceite,Aceite de oliva,Finca Dorada,16800,1 litro,https://placehold.co/600x600/png?text=Aceite%20de%20oliva
+aceite,Aceite girasol,Girasol Azul,8200,1 litro,https://placehold.co/600x600/png?text=Aceite%20girasol
+detergente,Detergente liquido,LimpioMax,12500,1 litro,https://placehold.co/600x600/png?text=Detergente%20liquido
+detergente,Detergente en polvo,Fresca Limon,9800,1 litro,https://placehold.co/600x600/png?text=Detergente%20polvo
+detergente,Detergente concentrado,LimpioMax,14900,1 litro,https://placehold.co/600x600/png?text=Detergente%20concentrado
+cafe,Cafe molido,Tierra Calida,11200,250 g,https://placehold.co/600x600/png?text=Cafe%20molido
+cafe,Cafe instantaneo,Desayuno Oro,9800,250 g,https://placehold.co/600x600/png?text=Cafe%20instantaneo
+cafe,Cafe descafeinado,Tierra Calida,11800,250 g,https://placehold.co/600x600/png?text=Cafe%20descafeinado

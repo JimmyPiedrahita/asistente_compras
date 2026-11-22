@@ -1,27 +1,13 @@
 """Routers de la API HTTP."""
 
-from . import (
-    administracion,
-    almacenes,
-    busqueda,
-    carrito,
-    exportacion,
-    lista_compra,
-    salud,
-    seguridad,
-    sesiones,
-)
+from . import admin_almacen, admin_app, auth, cliente, salud
 
 ROUTERS = (
     salud.router,
-    almacenes.router,
-    seguridad.router,
-    sesiones.router,
-    lista_compra.router,
-    busqueda.router,
-    carrito.router,
-    administracion.router,
-    exportacion.router,
+    auth.router,
+    cliente.router,
+    admin_almacen.router,
+    admin_app.router,
 )
 
 __all__ = ["ROUTERS"]

@@ -4,19 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asistente-compras"
-version = "3.1.0"
-description = "API REST MVC multi-almacén para comparación de compras con MongoDB"
+version = "5.0.0"
+description = "Aplicación web de compras y comparación de productos entre almacenes"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "pymongo>=4.6,<5",
   "fastapi>=0.115,<1",
   "uvicorn[standard]>=0.30,<1",
+  "email-validator>=2,<3",
+  "cloudinary>=1.40,<2",
+  "python-multipart>=0.0.9,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "httpx2>=2.16,<3",
+  "httpx>=0.27,<1",
   "pytest>=8,<9",
   "ruff>=0.8,<1",
   "PyYAML>=6,<7",

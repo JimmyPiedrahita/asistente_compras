@@ -1,4 +1,4 @@
-"""Utilidades transversales: configuración, errores, logging y Observer."""
+"""Utilidades transversales: configuración y errores."""
 
 from .config import Settings
 from .errors import (
@@ -11,8 +11,6 @@ from .errors import (
     SesionInvalida,
     SolicitudInvalida,
 )
-from .observer import ObservadorNulo, SujetoObservable
-from .results import Resultado
 
 __all__ = [
     "Conflicto",
@@ -20,11 +18,8 @@ __all__ = [
     "ErrorAplicacion",
     "NoEncontrado",
     "NoPermitido",
-    "ObservadorNulo",
-    "Resultado",
     "ServicioNoDisponible",
     "SesionInvalida",
     "Settings",
     "SolicitudInvalida",
-    "SujetoObservable",
 ]
