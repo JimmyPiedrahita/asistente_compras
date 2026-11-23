@@ -76,6 +76,10 @@ class CheckoutSolicitud(ModeloBase):
     clave_idempotencia: str | None = Field(default=None, max_length=100)
 
 
+class SincronizarPagoSolicitud(ModeloBase):
+    transaccion_id: str = Field(min_length=1, max_length=100)
+
+
 class CompraRespuesta(ModeloBase):
     compra_id: str
     fecha: str
@@ -87,6 +91,10 @@ class CompraRespuesta(ModeloBase):
     descuento_total: float
     total: float
     pago: bool
+    pago_estado: str = "PENDING"
+    pago_proveedor: str = ""
+    pago_referencia: str = ""
+    checkout_url: str | None = None
 
 
 __all__ = [
@@ -103,4 +111,5 @@ __all__ = [
     "ModoBusqueda",
     "ProductoPublico",
     "ResultadoBusqueda",
+    "SincronizarPagoSolicitud",
 ]

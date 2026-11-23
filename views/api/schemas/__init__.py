@@ -29,6 +29,7 @@ from .cliente import (
     ModoBusqueda,
     ProductoPublico,
     ResultadoBusqueda,
+    SincronizarPagoSolicitud,
 )
 
 __all__ = [
@@ -60,5 +61,6 @@ __all__ = [
     "RegistroClienteSolicitud",
     "ResultadoBusqueda",
     "SesionRespuesta",
+    "SincronizarPagoSolicitud",
     "UsuarioAdminRespuesta",
 ]

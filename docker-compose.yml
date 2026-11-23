@@ -37,6 +37,15 @@ x-entorno-app: &entorno-app
   CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
   CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-asistente-compras}
   MAX_PRODUCT_IMAGE_BYTES: ${MAX_PRODUCT_IMAGE_BYTES:-2000000}
+  PAYMENTS_PROVIDER: ${PAYMENTS_PROVIDER:-}
+  PAYMENTS_SANDBOX: ${PAYMENTS_SANDBOX:-true}
+  WOMPI_PUBLIC_KEY: ${WOMPI_PUBLIC_KEY:-}
+  WOMPI_PRIVATE_KEY: ${WOMPI_PRIVATE_KEY:-}
+  WOMPI_INTEGRITY_SECRET: ${WOMPI_INTEGRITY_SECRET:-}
+  WOMPI_EVENTS_SECRET: ${WOMPI_EVENTS_SECRET:-}
+  # En Docker la SPA se sirve desde la API en el puerto 8000. Para Vite local
+  # sobrescribe esta variable con http://localhost:3000/pago/{reference}.
+  WOMPI_REDIRECT_URL: ${WOMPI_REDIRECT_URL:-http://localhost:8000/pago/{reference}}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 services:
@@ -164,6 +173,20 @@ services:
     depends_on:
       mongo-init:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Túnel público permanente para el ambiente staging. Se activa solo con:
+  # docker compose --profile staging up -d --build
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: asistente_compras_cloudflared
+    profiles: ["staging"]
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Define CLOUDFLARE_TUNNEL_TOKEN en .env}
+    depends_on:
+      app:
+        condition: service_started
     restart: unless-stopped
 
   tools:

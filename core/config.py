@@ -59,6 +59,17 @@ def _bool(entorno: Mapping[str, str], clave: str) -> bool:
     return _texto(entorno, clave).lower() in {"1", "true", "si", "sí", "yes", "on"}
 
 
+def _bool_estricto(entorno: Mapping[str, str], clave: str, defecto: bool) -> bool:
+    valor = _texto(entorno, clave).lower()
+    if not valor:
+        return defecto
+    if valor in {"1", "true", "si", "sí", "yes", "on"}:
+        return True
+    if valor in {"0", "false", "no", "off"}:
+        return False
+    raise ConfiguracionInvalida(f"{clave} debe ser true o false")
+
+
 @dataclass(frozen=True)
 class Settings:
     """Configuración inmutable de la aplicación."""
@@ -110,6 +121,13 @@ class Settings:
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
     cloudinary_folder: str = "asistente-compras"
+    payments_provider: str = ""
+    payments_sandbox: bool = True
+    wompi_public_key: str = ""
+    wompi_private_key: str = ""
+    wompi_integrity_secret: str = ""
+    wompi_events_secret: str = ""
+    wompi_redirect_url: str = "http://localhost:3000/pago/{reference}"
     log_level: str = "INFO"
 
     def __post_init__(self) -> None:
@@ -189,6 +207,53 @@ class Settings:
                 "CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET "
                 "deben configurarse juntas"
             )
+        wompi_keys = (
+            self.wompi_public_key,
+            self.wompi_integrity_secret,
+            self.wompi_events_secret,
+        )
+        if any(wompi_keys) and not all(wompi_keys):
+            raise ConfiguracionInvalida(
+                "WOMPI_PUBLIC_KEY, WOMPI_INTEGRITY_SECRET y WOMPI_EVENTS_SECRET "
+                "deben configurarse juntas"
+            )
+        proveedor_pagos = str(self.payments_provider or "").strip().lower()
+        if proveedor_pagos not in {"", "auto", "wompi", "fake"}:
+            raise ConfiguracionInvalida("PAYMENTS_PROVIDER debe ser 'wompi' o 'fake'")
+        if proveedor_pagos == "fake" and not self.modo_pruebas:
+            raise ConfiguracionInvalida(
+                "PAYMENTS_PROVIDER=fake solo se permite con MONGODB_MODO_PRUEBAS=true"
+            )
+        if proveedor_pagos == "wompi" and not all(wompi_keys):
+            raise ConfiguracionInvalida("PAYMENTS_PROVIDER=wompi requiere las tres llaves WOMPI_*")
+        if all(wompi_keys) and proveedor_pagos != "fake":
+            self._validar_llaves_wompi()
+        if all(wompi_keys) and not self.wompi_redirect_url.strip():
+            raise ConfiguracionInvalida("WOMPI_REDIRECT_URL no puede estar vacía")
+
+    def _validar_llaves_wompi(self) -> None:
+        entorno = "sandbox" if self.payments_sandbox else "producción"
+        prefijos = {
+            "WOMPI_PUBLIC_KEY": ("pub_test_" if self.payments_sandbox else "pub_prod_"),
+            "WOMPI_INTEGRITY_SECRET": (
+                "test_integrity_" if self.payments_sandbox else "prod_integrity_"
+            ),
+            "WOMPI_EVENTS_SECRET": ("test_events_" if self.payments_sandbox else "prod_events_"),
+        }
+        if self.wompi_private_key:
+            prefijos["WOMPI_PRIVATE_KEY"] = "prv_test_" if self.payments_sandbox else "prv_prod_"
+        valores = {
+            "WOMPI_PUBLIC_KEY": self.wompi_public_key,
+            "WOMPI_PRIVATE_KEY": self.wompi_private_key,
+            "WOMPI_INTEGRITY_SECRET": self.wompi_integrity_secret,
+            "WOMPI_EVENTS_SECRET": self.wompi_events_secret,
+        }
+        for nombre, prefijo in prefijos.items():
+            valor = valores[nombre]
+            if valor and not valor.startswith(prefijo):
+                raise ConfiguracionInvalida(
+                    f"{nombre} no corresponde al entorno {entorno}; debe empezar por {prefijo}"
+                )
 
     @property
     def cloudinary_configurado(self) -> bool:
@@ -291,6 +356,17 @@ class Settings:
             cloudinary_api_secret=_texto(env, "CLOUDINARY_API_SECRET"),
             cloudinary_folder=_texto(env, "CLOUDINARY_FOLDER", "asistente-compras")
             or "asistente-compras",
+            payments_provider=_texto(env, "PAYMENTS_PROVIDER").lower(),
+            payments_sandbox=_bool_estricto(env, "PAYMENTS_SANDBOX", True),
+            wompi_public_key=_texto(env, "WOMPI_PUBLIC_KEY"),
+            wompi_private_key=_texto(env, "WOMPI_PRIVATE_KEY"),
+            wompi_integrity_secret=_texto(env, "WOMPI_INTEGRITY_SECRET"),
+            wompi_events_secret=_texto(env, "WOMPI_EVENTS_SECRET"),
+            wompi_redirect_url=_texto(
+                env,
+                "WOMPI_REDIRECT_URL",
+                "http://localhost:3000/pago/{reference}",
+            ),
             log_level=_texto(env, "LOG_LEVEL", "INFO") or "INFO",
         )
 
@@ -321,6 +397,7 @@ class Settings:
             "admin_password": admin_password,
             "cors_origins": (),
             "log_level": "CRITICAL",
+            "payments_provider": "fake",
         }
         datos.update(cambios)
         return cls(**datos)  # type: ignore[arg-type]

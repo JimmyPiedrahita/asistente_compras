@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "./components/Icon";
 import Toasts from "./components/Toasts";
 import { Button } from "./components/ui";
@@ -111,12 +111,26 @@ function Header({ page, onNavigate }) {
   );
 }
 
+function esRetornoPago() {
+  return (
+    window.location.pathname.startsWith("/pago/") ||
+    new URLSearchParams(window.location.search).has("compra")
+  );
+}
+
 function Shell() {
   const { session } = useApp();
   const items = useMemo(() => NAV[session?.rol] || [], [session?.rol]);
-  const [page, setPage] = useState(items[0]?.id || "");
+  const [page, setPage] = useState(() =>
+    session?.rol === "CLIENTE" && esRetornoPago() ? "carrito" : items[0]?.id || "",
+  );
+  const primeraVez = useRef(true);
 
   useEffect(() => {
+    if (primeraVez.current) {
+      primeraVez.current = false;
+      return;
+    }
     setPage(items[0]?.id || "");
   }, [items]);
 

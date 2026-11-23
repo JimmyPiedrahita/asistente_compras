@@ -383,6 +383,16 @@ class RepositorioComprasGlobal:
                 name="idempotencia",
             )
             self.compras.create_index(
+                "pago_referencia",
+                unique=True,
+                sparse=True,
+                name="pago_referencia",
+            )
+            self.compras.create_index(
+                "pago_detalle.estado",
+                name="pago_estado",
+            )
+            self.compras.create_index(
                 [("items.almacen_id", ASCENDING), ("fecha", ASCENDING)],
                 name="almacen_fecha",
             )
@@ -440,6 +450,62 @@ class RepositorioComprasGlobal:
             return self.compras.find_one({"_id": str(compra_id)})
         except PyMongoError as error:  # pragma: no cover
             raise traducir_error(error, "No se pudo consultar la compra") from error
+
+    def obtener_compra_por_referencia(self, referencia: str) -> dict[str, Any] | None:
+        try:
+            return self.compras.find_one(
+                {
+                    "$or": [
+                        {"pago_referencia": str(referencia)},
+                        {"pago_detalle.referencia_externa": str(referencia)},
+                    ]
+                }
+            )
+        except PyMongoError as error:  # pragma: no cover
+            raise traducir_error(error, "No se pudo consultar el pago") from error
+
+    def actualizar_pago(
+        self,
+        compra_id: str,
+        *,
+        estado: str,
+        transaccion_id: str,
+        estado_externo: str,
+        evento: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        filtro = {
+            "_id": str(compra_id),
+            "pago_detalle.eventos.evento_id": {"$ne": evento["evento_id"]},
+        }
+        if estado not in {"APPROVED", "VOIDED"}:
+            # Nunca degradar una compra ya aprobada por un evento atrasado.
+            filtro["$or"] = [
+                {"pago_detalle.estado": {"$ne": "APPROVED"}},
+                {"pago_detalle.estado": {"$exists": False}, "pago": {"$ne": True}},
+            ]
+        datos_evento = dict(evento)
+        datos_evento.setdefault("recibido_en", _ahora())
+        cambios: dict[str, Any] = {
+            "$set": {
+                "pago": estado == "APPROVED",
+                "pago_detalle.estado": estado,
+                "pago_detalle.transaccion_id": transaccion_id,
+                "pago_detalle.estado_externo": estado_externo,
+                "pago_detalle.actualizado_en": _ahora(),
+            },
+            "$push": {"pago_detalle.eventos": datos_evento},
+        }
+        try:
+            documento = self.compras.find_one_and_update(
+                filtro,
+                cambios,
+                return_document=ReturnDocument.AFTER,
+            )
+            if documento is not None:
+                return documento
+            return self.compras.find_one({"_id": str(compra_id)})
+        except PyMongoError as error:  # pragma: no cover
+            raise traducir_error(error, "No se pudo actualizar el pago") from error
 
 
 class RepositorioValidacion:

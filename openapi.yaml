@@ -566,6 +566,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/{compra_id}:
+    get:
+      tags:
+      - Cliente
+      summary: Consultar Pago
+      operationId: consultar_pago_api_v1_payments__compra_id__get
+      parameters:
+      - name: compra_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Compra Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompraRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/{compra_id}/sync:
+    post:
+      tags:
+      - Cliente
+      summary: Sincronizar Pago
+      description: 'Consulta la transacción directamente en Wompi.
+
+
+        Sirve para entornos locales donde Wompi no puede alcanzar el webhook.'
+      operationId: sincronizar_pago_api_v1_payments__compra_id__sync_post
+      parameters:
+      - name: compra_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Compra Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SincronizarPagoSolicitud'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompraRespuesta'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/admin-almacen/productos:
     get:
       tags:
@@ -1341,6 +1419,23 @@ components:
         pago:
           type: boolean
           title: Pago
+        pago_estado:
+          type: string
+          title: Pago Estado
+          default: PENDING
+        pago_proveedor:
+          type: string
+          title: Pago Proveedor
+          default: ''
+        pago_referencia:
+          type: string
+          title: Pago Referencia
+          default: ''
+        checkout_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Checkout Url
       type: object
       required:
       - compra_id
@@ -1745,6 +1840,17 @@ components:
       - email
       - rol
       title: SesionRespuesta
+    SincronizarPagoSolicitud:
+      properties:
+        transaccion_id:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Transaccion Id
+      type: object
+      required:
+      - transaccion_id
+      title: SincronizarPagoSolicitud
     UsuarioAdminRespuesta:
       properties:
         usuario_id:

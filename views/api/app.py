@@ -16,6 +16,7 @@ from core.config import Settings
 from core.logging import configurar_logging, obtener_logger
 from infrastructure.imagenes import ServicioImagenesProducto
 from infrastructure.mongodb.contexto import ContextoAplicacion, construir_contexto
+from infrastructure.pagos import construir_proveedor
 
 from .errors import registrar_manejadores
 from .routers import ROUTERS
@@ -83,6 +84,7 @@ def create_app(
     app.state.sesiones = sesiones
     app.state.settings = settings
     app.state.imagenes = ServicioImagenesProducto.desde_settings(settings)
+    app.state.pagos = construir_proveedor(settings)
 
     origenes = list(settings.cors_origins)
     app.add_middleware(

@@ -309,6 +309,17 @@ class ProyectorCompras:
         if not compra:
             return
         compra_id = str(compra.get("_id"))
+        pago_detalle = compra.get("pago_detalle") or {}
+        estado_pago = str(pago_detalle.get("estado") or "")
+        aprobado = bool(compra.get("pago")) or estado_pago == "APPROVED"
+        if not aprobado:
+            # Solo se tocan los almacenes involucrados. Una compra que nunca
+            # se aprobó no tiene proyección, así que el borrado es idempotente.
+            self._eliminar_en(
+                compra_id,
+                [str(parte.get("almacen_id")) for parte in compra.get("por_almacen", []) or []],
+            )
+            return
         entrega = compra.get("datos_entrega", {}) or {}
         for parte in compra.get("por_almacen", []) or []:
             almacen_id = str(parte.get("almacen_id"))
@@ -348,20 +359,37 @@ class ProyectorCompras:
             }
             self._repositorio_almacen(almacen).upsert_compra(documento)
 
+    def _eliminar_en(self, compra_id: str, almacen_ids: list[str]) -> None:
+        for almacen_id in dict.fromkeys(almacen_ids):
+            almacen = self.repo_almacenes.obtener(almacen_id)
+            if almacen is None or not almacen.db_name:
+                continue
+            if self.aprovisionamiento is not None:
+                self.aprovisionamiento.asegurar_privilegios_compras(almacen)
+            self._repositorio_almacen(almacen).eliminar_compra(compra_id)
+
     def _eliminar(self, compra_id: str) -> None:
         for almacen in self.repo_almacenes.listar():
-            if almacen.db_name:
-                self._repositorio_almacen(almacen).eliminar_compra(compra_id)
+            if not almacen.db_name:
+                continue
+            if self.aprovisionamiento is not None:
+                self.aprovisionamiento.asegurar_privilegios_compras(almacen)
+            self._repositorio_almacen(almacen).eliminar_compra(compra_id)
 
     def reconciliar_todo(self) -> None:
         compras = self.repo_compras.listar_compras()
         ids: set[str] = set()
         for compra in compras:
             self._proyectar(compra)
-            ids.add(str(compra.get("_id")))
+            pago_detalle = compra.get("pago_detalle") or {}
+            estado_pago = str(pago_detalle.get("estado") or "")
+            if bool(compra.get("pago")) or estado_pago == "APPROVED":
+                ids.add(str(compra.get("_id")))
         for almacen in self.repo_almacenes.listar():
             if not almacen.db_name:
                 continue
+            if self.aprovisionamiento is not None:
+                self.aprovisionamiento.asegurar_privilegios_compras(almacen)
             repositorio = self._repositorio_almacen(almacen)
             for compra_id in repositorio.listar_ids_compras() - ids:
                 repositorio.eliminar_compra(compra_id)

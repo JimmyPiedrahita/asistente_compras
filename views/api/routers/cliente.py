@@ -25,6 +25,7 @@ from ..schemas import (
     CuponSolicitud,
     ListaItemSolicitud,
     ListaRespuesta,
+    SincronizarPagoSolicitud,
 )
 
 router = APIRouter(tags=["Cliente"])
@@ -142,6 +143,38 @@ def finalizar_compra(
         total_esperado=datos.total_esperado,
         clave_idempotencia=datos.clave_idempotencia,
     )
+
+
+@router.get("/payments/{compra_id}", response_model=CompraRespuesta)
+def consultar_pago(
+    compra_id: str,
+    sesion: Sesion = Depends(requerir_cliente),
+    compras: ControladorComprasCliente = Depends(obtener_compras_cliente),
+) -> dict:
+    return compras.obtener_estado(sesion, compra_id)
+
+
+@router.post("/payments/{compra_id}/sync", response_model=CompraRespuesta)
+def sincronizar_pago(
+    compra_id: str,
+    datos: SincronizarPagoSolicitud,
+    sesion: Sesion = Depends(requerir_cliente),
+    compras: ControladorComprasCliente = Depends(obtener_compras_cliente),
+) -> dict:
+    """Consulta la transacción directamente en Wompi.
+
+    Sirve para entornos locales donde Wompi no puede alcanzar el webhook.
+    """
+    return compras.sincronizar_pago(sesion, compra_id, datos.transaccion_id)
+
+
+@router.post("/payments/wompi/webhook", include_in_schema=False)
+def webhook_wompi(
+    evento: dict,
+    compras: ControladorComprasCliente = Depends(obtener_compras_cliente),
+) -> dict:
+    resultado = compras.procesar_evento(evento)
+    return {"recibido": resultado is not None}
 
 
 __all__ = ["router"]

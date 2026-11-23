@@ -191,6 +191,39 @@ npm run dev
 Vite sirve la interfaz en `http://localhost:3000` y redirige `/api` a
 `http://127.0.0.1:8000`.
 
+### Pagos con Wompi en sandbox
+
+El flujo de pago usa el checkout hospedado de Wompi. Para probarlo sin cobrar
+dinero real:
+
+1. Crea una cuenta de Wompi y entra al panel de **sandbox**.
+2. Copia la llave pública (`pub_test_...`), el secreto de integridad
+   (`test_integrity_...`) y el secreto de eventos (`test_events_...`).
+3. Configura `PAYMENTS_PROVIDER=wompi`, `PAYMENTS_SANDBOX=true` y las tres
+   llaves. Opcionalmente agrega `WOMPI_PRIVATE_KEY` (`prv_test_...`) para poder
+   consultar transacciones directamente desde la API.
+4. En el panel de Wompi registra la URL de eventos:
+   `https://<tu-dominio>/api/v1/payments/wompi/webhook`.
+   En local Wompi no puede alcanzar `localhost`; expón la API con un túnel
+   (`ngrok http 8000` o `cloudflared tunnel --url http://localhost:8000`) y usa
+   esa URL pública.
+5. Usa las tarjetas de prueba de Wompi (por ejemplo la tarjeta
+   `4111 1111 1111 1111`, cualquier fecha futura y CVV `123`) y confirma el
+   estado en el panel de transacciones.
+
+`WOMPI_REDIRECT_URL` puede apuntar a `/pago/{reference}`. Wompi agrega
+`?id=<transacción>`; el frontend lee ambos datos, consulta el pago y muestra el
+resultado. Wompi bloquea redirecciones hacia `localhost`, por lo que el adaptador
+omite automáticamente una URL local. Para recibir el retorno debes configurar una
+URL pública HTTPS, por ejemplo la URL de un túnel de desarrollo. Si el webhook no
+puede llegar (desarrollo local), el frontend usa `POST /payments/{compra_id}/sync`
+con el `id` de la transacción para consultarla directamente en Wompi.
+
+Sin llaves configuradas la pasarela queda **deshabilitada**: el checkout responde
+503 y ningún webhook se acepta. No existe un modo que apruebe pagos sin firma.
+Para pruebas automatizadas se puede usar `PAYMENTS_PROVIDER=fake`, pero solo
+cuando `MONGODB_MODO_PRUEBAS=true`.
+
 ### Modo de pruebas
 
 Las pruebas de integración pueden reutilizar un único `MONGODB_URI` sin crear
@@ -232,6 +265,13 @@ make test
 | `CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET` | No | Credenciales del servidor para subir imágenes; si faltan, las imágenes responden 503. |
 | `CLOUDINARY_FOLDER` | No | Carpeta raíz de imágenes. Por defecto `asistente-compras`. |
 | `MAX_PRODUCT_IMAGE_BYTES` | No | Tamaño máximo por imagen. Por defecto 2 000 000 bytes. |
+| `PAYMENTS_PROVIDER` | No | `wompi`, `fake` (solo en modo de pruebas) o vacío/`auto`. Sin llaves la pasarela queda deshabilitada. |
+| `PAYMENTS_SANDBOX` | No | Si es `true`, exige llaves `*_test_` y usa el sandbox de Wompi. Por defecto `true`. |
+| `WOMPI_PUBLIC_KEY` | Sandbox/producción | Llave pública (`pub_test_...` o `pub_prod_...`). |
+| `WOMPI_PRIVATE_KEY` | No | Llave privada (`prv_test_...`), necesaria para consultar transacciones. |
+| `WOMPI_INTEGRITY_SECRET` | Sandbox/producción | Secreto usado para firmar el monto y la referencia (`test_integrity_...`). |
+| `WOMPI_EVENTS_SECRET` | Sandbox/producción | Secreto usado para validar webhooks (`test_events_...`). |
+| `WOMPI_REDIRECT_URL` | No | Retorno del comprador; admite `{reference}`. Por defecto `http://localhost:3000/pago/{reference}`. |
 | `MONGODB_TIMEOUT_MS` | No | Tiempo de espera de MongoDB. Por defecto 5000. |
 | `LISTENER_REFRESH_SECONDS` | No | Frecuencia con la que el listener busca almacenes nuevos. Por defecto 15. |
 | `LOG_LEVEL` | No | Nivel de logging. |
@@ -271,7 +311,10 @@ cuando Cloudinary está configurado.
 | PATCH/DELETE | `/cart/items/{item_id}` | Cambiar cantidad o quitar. |
 | POST | `/cart/coupons` | Aplicar cupón. |
 | DELETE | `/cart/coupons/{codigo}` | Quitar cupón. |
-| POST | `/checkout` | Confirmar pago. |
+| POST | `/checkout` | Crear una compra pendiente y el intento de pago. |
+| GET | `/payments/{compra_id}` | Consultar el estado confirmado de una compra. |
+| POST | `/payments/{compra_id}/sync` | Consultar la transacción en Wompi con el `id` devuelto en el redirect. |
+| POST | `/payments/wompi/webhook` | Recibir eventos firmados de Wompi. |
 
 ### Administrador de almacén
 
