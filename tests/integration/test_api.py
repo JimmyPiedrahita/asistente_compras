@@ -543,10 +543,96 @@ class PruebasAPI(unittest.TestCase):
         )
         self.assertEqual(compra.status_code, 200, compra.text)
         comprobante = compra.json()
-        self.assertTrue(comprobante["pago"])
+        self.assertFalse(comprobante["pago"])
+        self.assertEqual(comprobante["pago_estado"], "PENDING")
         self.assertEqual(comprobante["total"], 9250)
         self.assertEqual(comprobante["datos_entrega"]["ciudad"], "Medellín")
         self.assertEqual(len(comprobante["por_almacen"]), 2)
+        self.assertNotEqual(
+            self.client.get("/api/v1/cart", headers=cliente).json()["items"],
+            [],
+        )
+
+        # Eventos que no son de transacción se ignoran sin provocar reintentos.
+        ignorado = self.client.post(
+            "/api/v1/payments/wompi/webhook",
+            json={"event": "nequi_token.updated", "environment": "test", "data": {}},
+        )
+        self.assertEqual(ignorado.status_code, 200, ignorado.text)
+
+        # Un monto distinto al de la compra nunca la aprueba.
+        monto_invalido = self.client.post(
+            "/api/v1/payments/wompi/webhook",
+            json={
+                "event": "transaction.updated",
+                "environment": "test",
+                "timestamp": 1763934000,
+                "data": {
+                    "transaction": {
+                        "id": "txn-sandbox-1",
+                        "reference": comprobante["pago_referencia"],
+                        "status": "APPROVED",
+                        "amount_in_cents": 1,
+                        "currency": "COP",
+                    }
+                },
+            },
+        )
+        self.assertEqual(monto_invalido.status_code, 400, monto_invalido.text)
+        self.assertFalse(
+            self.client.get(
+                f"/api/v1/payments/{comprobante['compra_id']}",
+                headers=cliente,
+            ).json()["pago"]
+        )
+
+        webhook = self.client.post(
+            "/api/v1/payments/wompi/webhook",
+            json={
+                "event": "transaction.updated",
+                "environment": "test",
+                "timestamp": 1763934000,
+                "data": {
+                    "transaction": {
+                        "id": "txn-sandbox-1",
+                        "reference": comprobante["pago_referencia"],
+                        "status": "APPROVED",
+                        "amount_in_cents": 925000,
+                        "currency": "COP",
+                    }
+                },
+            },
+        )
+        self.assertEqual(webhook.status_code, 200, webhook.text)
+
+        # Un evento atrasado no degrada una compra ya aprobada.
+        atrasado = self.client.post(
+            "/api/v1/payments/wompi/webhook",
+            json={
+                "event": "transaction.updated",
+                "environment": "test",
+                "timestamp": 1763934001,
+                "data": {
+                    "transaction": {
+                        "id": "txn-sandbox-1",
+                        "reference": comprobante["pago_referencia"],
+                        "status": "DECLINED",
+                        "amount_in_cents": 925000,
+                        "currency": "COP",
+                    }
+                },
+            },
+        )
+        self.assertEqual(atrasado.status_code, 200, atrasado.text)
+
+        aprobada = self.client.get(
+            f"/api/v1/payments/{comprobante['compra_id']}",
+            headers=cliente,
+        )
+        self.assertEqual(aprobada.status_code, 200, aprobada.text)
+        comprobante = aprobada.json()
+        self.assertTrue(comprobante["pago"])
+        self.assertEqual(comprobante["pago_estado"], "APPROVED")
         self.assertEqual(self.client.get("/api/v1/cart", headers=cliente).json()["items"], [])
 
         # No se duplica la compra: un reintento con la misma clave devuelve la

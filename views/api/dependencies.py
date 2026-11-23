@@ -13,6 +13,7 @@ from controllers.sesiones import RegistroSesiones, Sesion
 from core.errors import NoPermitido, SesionInvalida
 from infrastructure.imagenes import ServicioImagenesProducto
 from infrastructure.mongodb.contexto import ContextoAplicacion
+from infrastructure.pagos import ProveedorPagos
 from models.permisos import ADMINISTRADOR_ALMACEN, ADMINISTRADOR_APP, CLIENTE
 
 
@@ -26,6 +27,10 @@ def obtener_registro(request: Request) -> RegistroSesiones:
 
 def obtener_imagenes(request: Request) -> ServicioImagenesProducto:
     return request.app.state.imagenes
+
+
+def obtener_pagos(request: Request) -> ProveedorPagos:
+    return request.app.state.pagos
 
 
 def obtener_sesion(
@@ -65,8 +70,9 @@ def obtener_carrito(
 def obtener_compras_cliente(
     contexto: ContextoAplicacion = Depends(obtener_contexto),
     carrito: ControladorCarrito = Depends(obtener_carrito),
+    pagos: ProveedorPagos = Depends(obtener_pagos),
 ) -> ControladorComprasCliente:
-    return ControladorComprasCliente(contexto.repo_compras, carrito)
+    return ControladorComprasCliente(contexto.repo_compras, carrito, pagos)
 
 
 def obtener_admin_app(

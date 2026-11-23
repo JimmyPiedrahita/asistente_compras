@@ -39,6 +39,19 @@ class Carrito:
         self.items = [item for item in self.items if item.item_id != str(item_id)]
         return len(self.items) != antes
 
+    def descontar(self, almacen_id: str, producto_id: str, cantidad: int) -> bool:
+        """Descuenta unidades compradas sin borrar unidades agregadas después."""
+        cantidad = int(cantidad)
+        if cantidad <= 0:
+            return False
+        for item in list(self.items):
+            if item.almacen_id == str(almacen_id) and item.producto_id == str(producto_id):
+                item.cantidad -= cantidad
+                if item.cantidad <= 0:
+                    self.items.remove(item)
+                return True
+        return False
+
     def actualizar_cantidad(self, item_id: str, cantidad: int) -> bool:
         cantidad = int(cantidad)
         if cantidad < 1:

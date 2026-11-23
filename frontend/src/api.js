@@ -98,6 +98,14 @@ export const api = {
   removeCoupon: (token, codigo) =>
     request(`/cart/coupons/${q(codigo)}`, { method: "DELETE", token }),
   checkout: (token, payload) => request("/checkout", { method: "POST", token, body: payload }),
+  getPaymentStatus: (token, purchaseId) =>
+    request(`/payments/${q(purchaseId)}`, { token }),
+  syncPayment: (token, purchaseId, transactionId) =>
+    request(`/payments/${q(purchaseId)}/sync`, {
+      method: "POST",
+      token,
+      body: { transaccion_id: transactionId },
+    }),
 
   listProducts: (token) => request("/admin-almacen/productos", { token }),
   createProduct: (token, payload) =>

@@ -176,6 +176,8 @@ class PruebasProyectorCompras(unittest.TestCase):
                 {"almacen_id": "a1", "subtotal": 6000, "total": 6000},
                 {"almacen_id": "b1", "subtotal": 4500, "total": 4500},
             ],
+            "pago": True,
+            "pago_detalle": {"estado": "APPROVED"},
         }
 
     def test_proyecta_solo_la_parte_de_cada_almacen(self) -> None:
@@ -200,6 +202,19 @@ class PruebasProyectorCompras(unittest.TestCase):
         self.proyector._eliminar("compra-1")
         self.assertEqual(self.repo_a.eliminadas, ["compra-1"])
         self.assertEqual(self.repo_b.eliminadas, ["compra-1"])
+
+    def test_compra_pendiente_solo_limpia_sus_almacenes(self) -> None:
+        compra = self._compra()
+        compra["pago"] = False
+        compra["pago_detalle"] = {"estado": "PENDING"}
+        compra["por_almacen"] = [{"almacen_id": "a1", "subtotal": 6000, "total": 6000}]
+
+        self.proyector._proyectar(compra)
+
+        self.assertEqual(self.repo_a.eliminadas, ["compra-1"])
+        self.assertEqual(self.repo_b.eliminadas, [])
+        self.assertEqual(self.repo_a.compras, [])
+        self.assertEqual(self.repo_b.compras, [])
 
     def test_reconciliar_todo_elimina_proyecciones_obsoletas(self) -> None:
         self.repo_a._ids = {"compra-1", "obsoleta"}

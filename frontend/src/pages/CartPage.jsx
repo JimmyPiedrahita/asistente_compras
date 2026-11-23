@@ -40,6 +40,35 @@ function nuevaClaveIdempotencia() {
   return `compra-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+const COMPRA_KEY = "asistente_compras_compra_pendiente";
+
+function compraGuardada() {
+  try {
+    const raw = localStorage.getItem(COMPRA_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function datosRetornoPago() {
+  const params = new URLSearchParams(window.location.search);
+  let compraId = params.get("compra");
+  if (!compraId) {
+    const coincidencia = window.location.pathname.match(/\/pago\/([^/?#]+)/);
+    if (coincidencia) compraId = decodeURIComponent(coincidencia[1]);
+  }
+  let transaccionId = params.get("id") || params.get("transaction_id");
+  if (compraId?.includes("?id=")) {
+    const [, resto] = compraId.split("?id=");
+    transaccionId = transaccionId || resto;
+    compraId = compraId.split("?")[0];
+  }
+  return { compraId: compraId || null, transaccionId: transaccionId || null };
+}
+
+const ESTADOS_FINALES = ["APPROVED", "DECLINED", "VOIDED", "ERROR"];
+
 export default function CartPage({ onNavigate }) {
   const { token, session, notify, notifyError } = useApp();
   const [resumen, setResumen] = useState(null);
@@ -48,7 +77,8 @@ export default function CartPage({ onNavigate }) {
   const [aplicando, setAplicando] = useState(false);
   const [ocupado, setOcupado] = useState("");
   const [confirmando, setConfirmando] = useState(false);
-  const [compra, setCompra] = useState(null);
+  const [compra, setCompra] = useState(compraGuardada);
+  const [verificandoPago, setVerificandoPago] = useState(false);
   const [entrega, setEntrega] = useState({
     telefono: session?.telefono || "",
     direccion: session?.direccion || "",
@@ -71,6 +101,78 @@ export default function CartPage({ onNavigate }) {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  const guardarCompra = useCallback(
+    (datos) => {
+      setCompra(datos);
+      try {
+        if (datos?.pago_estado === "APPROVED") {
+          localStorage.removeItem(COMPRA_KEY);
+        } else if (datos?.compra_id) {
+          localStorage.setItem(COMPRA_KEY, JSON.stringify(datos));
+        }
+      } catch {
+        /* almacenamiento no disponible */
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const { compraId, transaccionId } = datosRetornoPago();
+    const objetivo = compraId || compraGuardada()?.compra_id;
+    if (!objetivo) return undefined;
+    if (compraId || transaccionId) {
+      window.history.replaceState({}, "", "/");
+    }
+    let cancelado = false;
+    setVerificandoPago(true);
+    (async () => {
+      try {
+        const datos = transaccionId
+          ? await api.syncPayment(token, objetivo, transaccionId)
+          : await api.getPaymentStatus(token, objetivo);
+        if (cancelado) return;
+        guardarCompra(datos);
+        if (datos.pago_estado === "APPROVED") {
+          notify("Pago aprobado. La compra quedó registrada.", "success", "Compra");
+          cargar();
+        } else if (datos.pago_estado !== "PENDING") {
+          notify("El pago no fue aprobado. Puedes intentarlo de nuevo.", "error", "Pago");
+        }
+      } catch (error) {
+        if (!cancelado) notifyError(error);
+      } finally {
+        if (!cancelado) setVerificandoPago(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // Solo al montar: se resuelve el retorno de Wompi una vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    if (!compra?.compra_id || ESTADOS_FINALES.includes(compra.pago_estado)) {
+      return undefined;
+    }
+    const temporizador = setInterval(async () => {
+      try {
+        const datos = await api.getPaymentStatus(token, compra.compra_id);
+        if (datos.pago_estado !== compra.pago_estado) {
+          guardarCompra(datos);
+          if (datos.pago_estado === "APPROVED") {
+            notify("Pago aprobado. La compra quedó registrada.", "success", "Compra");
+            cargar();
+          }
+        }
+      } catch {
+        /* el sondeo se reintenta en el siguiente ciclo */
+      }
+    }, 6000);
+    return () => clearInterval(temporizador);
+  }, [compra, guardarCompra, notify, notifyError, cargar, token]);
 
   const ejecutar = async (clave, accion) => {
     setOcupado(clave);
@@ -95,6 +197,18 @@ export default function CartPage({ onNavigate }) {
     ejecutar(`item-${item.item_id}`, () => api.removeCartItem(token, item.item_id));
 
   const vaciar = () => ejecutar("vaciar", () => api.clearCart(token));
+
+  const salirDeCompra = () => {
+    setCompra(null);
+    if (compra?.pago_estado !== "PENDING") {
+      try {
+        localStorage.removeItem(COMPRA_KEY);
+      } catch {
+        /* almacenamiento no disponible */
+      }
+    }
+    cargar();
+  };
 
   const aplicarCupon = async (evento) => {
     evento.preventDefault();
@@ -131,9 +245,13 @@ export default function CartPage({ onNavigate }) {
         clave_idempotencia: claveRef.current,
       });
       claveRef.current = nuevaClaveIdempotencia();
-      setCompra(datos);
+      guardarCompra(datos);
       setResumen(null);
-      notify("Pago completado. La compra quedó registrada.", "success", "Compra");
+      if (datos.pago_estado === "APPROVED") {
+        notify("Pago aprobado. La compra quedó registrada.", "success", "Compra");
+      } else {
+        notify("El pago quedó pendiente de confirmación.", "info", "Pago");
+      }
     } catch (error) {
       if (error?.status === 409 && error.payload?.detalles?.resumen) {
         setResumen(error.payload.detalles.resumen);
@@ -150,6 +268,27 @@ export default function CartPage({ onNavigate }) {
     }
   };
 
+  const consultarEstadoPago = async () => {
+    if (!compra?.compra_id) return;
+    setVerificandoPago(true);
+    try {
+      const datos = await api.getPaymentStatus(token, compra.compra_id);
+      guardarCompra(datos);
+      if (datos.pago_estado === "APPROVED") {
+        notify("Pago aprobado. La compra quedó registrada.", "success", "Compra");
+        cargar();
+      } else if (datos.pago_estado === "DECLINED") {
+        notify("El pago fue rechazado. Puedes iniciar uno nuevo.", "error", "Pago");
+      } else {
+        notify("El pago sigue pendiente.", "info", "Pago");
+      }
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setVerificandoPago(false);
+    }
+  };
+
   if (cargando) {
     return (
       <Card>
@@ -161,16 +300,36 @@ export default function CartPage({ onNavigate }) {
   }
 
   if (compra) {
+    const aprobado = compra.pago_estado === "APPROVED";
+    const rechazado = ["DECLINED", "VOIDED", "ERROR"].includes(compra.pago_estado);
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <Card>
           <div className="flex flex-col items-center text-center">
-            <span className="grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600">
-              <Icon name="check" size={26} />
+            <span
+              className={
+                aprobado
+                  ? "grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-emerald-600"
+                  : rechazado
+                    ? "grid h-14 w-14 place-items-center rounded-full bg-red-50 text-red-600"
+                    : "grid h-14 w-14 place-items-center rounded-full bg-amber-50 text-amber-700"
+              }
+            >
+              <Icon name={aprobado ? "check" : rechazado ? "alert" : "refresh"} size={26} />
             </span>
-            <h1 className="mt-4 text-xl font-bold text-stone-900">Pago completado</h1>
+            <h1 className="mt-4 text-xl font-bold text-stone-900">
+              {aprobado
+                ? "Pago aprobado"
+                : rechazado
+                  ? "Pago no aprobado"
+                  : "Pago pendiente"}
+            </h1>
             <p className="mt-1 max-w-xl text-sm text-stone-600">
-              Tu compra quedó registrada y los datos de entrega fueron guardados.
+              {aprobado
+                ? "Wompi confirmó el pago y la compra quedó registrada."
+                : rechazado
+                  ? "La pasarela rechazó o canceló el pago. El carrito sigue disponible."
+                  : "Tu compra está guardada. El estado cambiará cuando la pasarela confirme el resultado."}
             </p>
             <div className="mt-4 grid w-full gap-2 rounded-lg border border-stone-200 bg-stone-50/60 p-4 text-left text-sm sm:grid-cols-2">
               <p>
@@ -182,7 +341,7 @@ export default function CartPage({ onNavigate }) {
                 <span className="text-stone-800">{fecha(compra.fecha)}</span>
               </p>
               <p>
-                <span className="text-stone-500">Total pagado: </span>
+                <span className="text-stone-500">Total: </span>
                 <span className="font-semibold text-stone-900">{dinero(compra.total)}</span>
               </p>
               <p>
@@ -190,6 +349,24 @@ export default function CartPage({ onNavigate }) {
                 <span className="text-stone-800">{compra.por_almacen.length}</span>
               </p>
             </div>
+            {compra.checkout_url && !aprobado && !rechazado ? (
+              <a
+                href={compra.checkout_url}
+                className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg bg-amber-700 px-4 text-sm font-semibold text-white no-underline hover:bg-amber-800 sm:w-auto"
+              >
+                Continuar al pago seguro
+              </a>
+            ) : null}
+            {!aprobado ? (
+              <Button
+                className="mt-4"
+                variant="secondary"
+                loading={verificandoPago}
+                onClick={consultarEstadoPago}
+              >
+                Consultar estado
+              </Button>
+            ) : null}
           </div>
         </Card>
 
@@ -248,8 +425,8 @@ export default function CartPage({ onNavigate }) {
             <Button variant="secondary" icon="list" onClick={() => onNavigate("lista")}>
               Volver a la lista
             </Button>
-            <Button icon="cart" onClick={() => setCompra(null)}>
-              Nueva compra
+            <Button icon="cart" onClick={salirDeCompra}>
+              {aprobado || rechazado ? "Nueva compra" : "Volver al carrito"}
             </Button>
           </div>
         </Card>
@@ -513,7 +690,7 @@ export default function CartPage({ onNavigate }) {
             loading={confirmando}
             onClick={confirmar}
           >
-            Confirmar pago · {dinero(resumen.total)}
+            Continuar al pago · {dinero(resumen.total)}
           </Button>
         </Card>
       </div>
